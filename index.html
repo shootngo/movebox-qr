@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MoveBox QR • Packing Tracker</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; }
+  .box-card { transition: all 0.2s ease; }
+  .box-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); }
+  .modal { animation: fadeInScale 0.2s ease forwards; }
+  @keyframes fadeInScale { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+  .qr-container { background: white; padding: 16px; border-radius: 12px; }
+  .status-packed { background-color: #dbeafe; color: #1e40af; }
+  .status-ontruck { background-color: #fef3c7; color: #92400e; }
+  .status-arrived { background-color: #d1fae5; color: #065f46; }
+  .status-unpacked { background-color: #e0e7ff; color: #3730a3; }
+  .mic-btn { transition: all 0.1s ease; }
+  .mic-btn.listening { background-color: #ef4444; color: white; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+</style>
+</head>
+<body class="bg-zinc-950 text-zinc-200">
+<div class="max-w-4xl mx-auto">
+  <!-- Header -->
+  <div class="bg-zinc-900 border-b border-zinc-800 px-6 py-5 flex items-center justify-between sticky top-0 z-50">
+    <div>
+      <h1 class="text-3xl font-bold tracking-tight">MoveBox QR</h1>
+      <p class="text-zinc-400 text-sm">Debbie Lane Move • Know every box</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <button onclick="exportData()" 
+              class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm font-medium flex items-center gap-2">
+        <span>Export</span>
+      </button>
+      <button onclick="showNewBoxModal()" 
+              class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-semibold flex items-center gap-2 shadow-lg">
+        <span>+ New Box</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="flex border-b border-zinc-800 bg-zinc-900 px-2">
+    <button onclick="switchTab(0)" id="tab-0"
+            class="tab-btn flex-1 py-4 font-medium border-b-2 border-emerald-500 text-emerald-400">Dashboard</button>
+    <button onclick="switchTab(1)" id="tab-1"
+            class="tab-btn flex-1 py-4 font-medium text-zinc-400 hover:text-zinc-200">My Boxes</button>
+    <button onclick="switchTab(2)" id="tab-2"
+            class="tab-btn flex-1 py-4 font-medium text-zinc-400 hover:text-zinc-200">Scan QR</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="view-0" class="p-6">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div class="bg-zinc-900 rounded-3xl p-5">
+        <div class="text-zinc-400 text-sm">Total Boxes</div>
+        <div id="stat-total" class="text-5xl font-bold mt-1">0</div>
+      </div>
+      <div class="bg-zinc-900 rounded-3xl p-5">
+        <div class="text-zinc-400 text-sm">Packed</div>
+        <div id="stat-packed" class="text-5xl font-bold mt-1 text-blue-400">0</div>
+      </div>
+      <div class="bg-zinc-900 rounded-3xl p-5">
+        <div class="text-zinc-400 text-sm">On Truck / Arrived</div>
+        <div id="stat-progress" class="text-5xl font-bold mt-1 text-amber-400">0</div>
+      </div>
+      <div class="bg-zinc-900 rounded-3xl p-5">
+        <div class="text-zinc-400 text-sm">Unpacked</div>
+        <div id="stat-unpacked" class="text-5xl font-bold mt-1 text-violet-400">0</div>
+      </div>
+    </div>
+
+    <h2 class="font-semibold text-xl mb-4 px-1">Boxes by Room</h2>
+    <div id="room-stats" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+  </div>
+
+  <!-- MY BOXES -->
+  <div id="view-1" class="p-6 hidden">
+    <div class="flex gap-3 mb-4">
+      <input id="search-input" type="text" placeholder="Search boxes or items..." 
+             class="flex-1 bg-zinc-900 border border-zinc-700 rounded-2xl px-5 py-3 text-lg focus:outline-none focus:border-emerald-500"
+             oninput="renderBoxesList()">
+      <select id="room-filter" onchange="renderBoxesList()" 
+              class="bg-zinc-900 border border-zinc-700 rounded-2xl px-4 text-sm">
+        <option value="">All Rooms</option>
+      </select>
+    </div>
+
+    <div id="boxes-list" class="space-y-3"></div>
+  </div>
+
+  <!-- SCAN QR -->
+  <div id="view-2" class="p-6 hidden text-center">
+    <div class="max-w-md mx-auto">
+      <div class="mb-6">
+        <div class="mx-auto w-20 h-20 bg-zinc-800 rounded-3xl flex items-center justify-center mb-4">
+          <span class="text-5xl">📷</span>
+        </div>
+        <h2 class="text-2xl font-semibold mb-2">Scan Box QR Code</h2>
+        <p class="text-zinc-400">Point your camera at any box label to instantly see what’s inside and where it goes.</p>
+      </div>
+
+      <button onclick="startScanner()" 
+              class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-3xl text-xl font-semibold shadow-xl mb-4">
+        Start Camera Scan
+      </button>
+      
+      <button onclick="stopScanner()" 
+              class="w-full py-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm">
+        Stop Scanner
+      </button>
+
+      <div id="qr-reader" class="mt-6 mx-auto max-w-[320px] rounded-3xl overflow-hidden border border-zinc-700"></div>
+      <div id="scan-result" class="mt-4 text-sm text-zinc-400"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Box Detail Modal -->
+<div id="box-modal" onclick="if (event.target.id === 'box-modal') closeModal()" 
+     class="hidden fixed inset-0 bg-black/70 flex items-end md:items-center justify-center z-[100]">
+  <div onclick="event.stopImmediatePropagation()" 
+       class="bg-zinc-900 w-full md:w-[520px] md:rounded-3xl md:m-4 rounded-t-3xl p-6 max-h-[92vh] overflow-auto">
+    
+    <div class="flex justify-between items-start mb-4">
+      <div>
+        <div id="modal-box-id" class="font-mono text-emerald-400 text-xl font-bold"></div>
+        <div id="modal-room" class="text-3xl font-semibold"></div>
+      </div>
+      <button onclick="closeModal()" class="text-3xl leading-none text-zinc-500 hover:text-white">×</button>
+    </div>
+
+    <!-- Status -->
+    <div class="flex gap-2 mb-6" id="status-buttons"></div>
+
+    <!-- QR Code -->
+    <div class="qr-container mb-6 flex justify-center">
+      <div id="modal-qr"></div>
+    </div>
+
+    <!-- Items with Voice Input -->
+    <div class="mb-6">
+      <div class="flex justify-between items-center mb-3">
+        <div class="font-semibold">Contents</div>
+        <button onclick="addItemToCurrentBox()" 
+                class="text-sm px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-2xl">+ Add Item</button>
+      </div>
+
+      <!-- Voice-powered item input -->
+      <div class="flex gap-2 mb-3">
+        <input id="item-input" type="text" placeholder="Type or tap mic to speak..." 
+               class="flex-1 bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500"
+               onkeypress="if (event.key === 'Enter') addTypedItem()">
+        <button onclick="startVoiceInput()" id="mic-btn"
+                class="mic-btn px-4 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-2xl flex items-center justify-center">
+          <span class="text-xl">🎤</span>
+        </button>
+      </div>
+
+      <div id="modal-items" class="space-y-2 text-sm"></div>
+    </div>
+
+    <!-- Notes -->
+    <div class="mb-6">
+      <div class="font-semibold mb-2">Notes</div>
+      <textarea id="modal-notes" onblur="saveNotes()" 
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl p-4 text-sm h-20 resize-y" 
+                placeholder="Fragile • Top load • Heavy • etc."></textarea>
+    </div>
+
+    <div class="flex gap-3">
+      <button onclick="printLabel()" 
+              class="flex-1 py-3 bg-white text-black font-semibold rounded-2xl">Print Label</button>
+      <button onclick="deleteCurrentBox()" 
+              class="flex-1 py-3 bg-red-900/70 hover:bg-red-900 text-red-300 rounded-2xl">Delete Box</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== DATA ====================
+let boxes = JSON.parse(localStorage.getItem('movingBoxes') || '[]');
+let currentBoxId = null;
+let html5QrCode = null;
+let recognition = null;
+
+const defaultRooms = [
+  "Master Bedroom", "Emma's Room", "Son's Room", "Kitchen", 
+  "Living Room", "Dining Room", "Master Bathroom", "Kids Bathroom",
+  "Office", "Workshop / Man Cave", "Pole Barn / Storage", "Garage", 
+  "Laundry Room", "Misc / Other"
+];
+
+function saveData() {
+  localStorage.setItem('movingBoxes', JSON.stringify(boxes));
+}
+
+function generateBoxId() {
+  const max = boxes.length > 0 ? Math.max(...boxes.map(b => parseInt(b.id.split('-')[1]))) : 0;
+  return `BOX-${String(max + 1).padStart(4, '0')}`;
+}
+
+// ==================== TABS ====================
+function switchTab(tab) {
+  document.querySelectorAll('[id^="view-"]').forEach(el => el.classList.add('hidden'));
+  document.getElementById(`view-${tab}`).classList.remove('hidden');
+
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    btn.classList.toggle('border-b-2', i === tab);
+    btn.classList.toggle('border-emerald-500', i === tab);
+    btn.classList.toggle('text-emerald-400', i === tab);
+    btn.classList.toggle('text-zinc-400', i !== tab);
+  });
+
+  if (tab === 1) renderBoxesList();
+  if (tab === 0) renderDashboard();
+}
+
+// ==================== DASHBOARD ====================
+function renderDashboard() {
+  const total = boxes.length;
+  const packed = boxes.filter(b => b.status === 'packed').length;
+  const progress = boxes.filter(b => ['ontruck', 'arrived'].includes(b.status)).length;
+  const unpacked = boxes.filter(b => b.status === 'unpacked').length;
+
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-packed').textContent = packed;
+  document.getElementById('stat-progress').textContent = progress;
+  document.getElementById('stat-unpacked').textContent = unpacked;
+
+  const roomCounts = {};
+  boxes.forEach(box => {
+    roomCounts[box.room] = (roomCounts[box.room] || 0) + 1;
+  });
+
+  const container = document.getElementById('room-stats');
+  container.innerHTML = Object.keys(roomCounts).length === 0 
+    ? `<div class="col-span-full text-center py-8 text-zinc-500">No boxes yet. Create your first box!</div>`
+    : Object.entries(roomCounts).sort((a,b) => b[1]-a[1]).map(([room, count]) => `
+        <div onclick="filterByRoom('${room}')" 
+             class="bg-zinc-900 hover:bg-zinc-800 cursor-pointer rounded-3xl p-5 flex justify-between items-center">
+          <div>
+            <div class="font-semibold">${room}</div>
+            <div class="text-xs text-zinc-500">${count} box${count > 1 ? 'es' : ''}</div>
+          </div>
+          <div class="text-4xl font-bold text-emerald-400">${count}</div>
+        </div>
+      `).join('');
+}
+
+function filterByRoom(room) {
+  switchTab(1);
+  document.getElementById('room-filter').value = room;
+  renderBoxesList();
+}
+
+// ==================== BOXES LIST ====================
+function renderBoxesList() {
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const roomFilter = document.getElementById('room-filter').value;
+
+  let filtered = boxes;
+  if (roomFilter) filtered = filtered.filter(b => b.room === roomFilter);
+  if (search) {
+    filtered = filtered.filter(b => 
+      b.id.toLowerCase().includes(search) || 
+      b.room.toLowerCase().includes(search) ||
+      (b.items && b.items.join(' ').toLowerCase().includes(search))
+    );
+  }
+
+  const container = document.getElementById('boxes-list');
+  
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="text-center py-12 text-zinc-500">No boxes found.</div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.map(box => {
+    const itemCount = box.items ? box.items.length : 0;
+    return `
+      <div onclick="showBoxDetail('${box.id}')" 
+           class="box-card bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl p-5 cursor-pointer">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="font-mono text-emerald-400 text-sm">${box.id}</div>
+            <div class="text-2xl font-semibold">${box.room}</div>
+          </div>
+          <div class="text-right">
+            <div class="text-xs px-3 py-1 rounded-full ${getStatusClass(box.status)}">${getStatusLabel(box.status)}</div>
+            <div class="text-xs text-zinc-500 mt-1">${itemCount} item${itemCount !== 1 ? 's' : ''}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function getStatusClass(status) {
+  if (status === 'packed') return 'status-packed';
+  if (status === 'ontruck') return 'status-ontruck';
+  if (status === 'arrived') return 'status-arrived';
+  if (status === 'unpacked') return 'status-unpacked';
+  return 'bg-zinc-700 text-zinc-300';
+}
+
+function getStatusLabel(status) {
+  if (status === 'packed') return 'Packed';
+  if (status === 'ontruck') return 'On Truck';
+  if (status === 'arrived') return 'Arrived';
+  if (status === 'unpacked') return 'Unpacked';
+  return 'Packed';
+}
+
+// ==================== CREATE NEW BOX ====================
+function showNewBoxModal() {
+  const roomOptions = defaultRooms.map(r => `<option value="${r}">${r}</option>`).join('');
+  
+  const modalHTML = `
+    <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[200]" onclick="this.remove()">
+      <div onclick="event.stopImmediatePropagation()" class="bg-zinc-900 rounded-3xl p-6 w-full max-w-md mx-4">
+        <h3 class="text-2xl font-semibold mb-6">Create New Box</h3>
+        
+        <div class="mb-5">
+          <label class="block text-sm mb-2 text-zinc-400">Destination Room in New House</label>
+          <select id="new-room-select" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-lg">
+            ${roomOptions}
+            <option value="custom">+ Add Custom Room</option>
+          </select>
+        </div>
+
+        <div id="custom-room-div" class="hidden mb-5">
+          <label class="block text-sm mb-2 text-zinc-400">Custom Room Name</label>
+          <input id="custom-room-input" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3" placeholder="e.g. Craft Room">
+        </div>
+
+        <div class="flex gap-3">
+          <button onclick="this.closest('.fixed').remove()" 
+                  class="flex-1 py-3 bg-zinc-800 rounded-2xl">Cancel</button>
+          <button onclick="createNewBox(this)" 
+                  class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-semibold">Create Box</button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+  
+  setTimeout(() => {
+    const select = document.getElementById('new-room-select');
+    const customDiv = document.getElementById('custom-room-div');
+    select.onchange = () => {
+      customDiv.classList.toggle('hidden', select.value !== 'custom');
+    };
+  }, 100);
+}
+
+function createNewBox(btn) {
+  const select = document.getElementById('new-room-select');
+  let room = select.value;
+  
+  if (room === 'custom') {
+    room = document.getElementById('custom-room-input').value.trim();
+    if (!room) { alert("Please enter a room name"); return; }
+  }
+  
+  const newBox = {
+    id: generateBoxId(),
+    room: room,
+    items: [],
+    notes: "",
+    status: "packed",
+    created: new Date().toISOString()
+  };
+  
+  boxes.unshift(newBox);
+  saveData();
+  btn.closest('.fixed').remove();
+  
+  showBoxDetail(newBox.id);
+  renderDashboard();
+}
+
+// ==================== BOX DETAIL + VOICE INPUT ====================
+function showBoxDetail(boxId) {
+  currentBoxId = boxId;
+  const box = boxes.find(b => b.id === boxId);
+  if (!box) return;
+
+  document.getElementById('modal-box-id').textContent = box.id;
+  document.getElementById('modal-room').textContent = box.room;
+  document.getElementById('modal-notes').value = box.notes || '';
+
+  const statusContainer = document.getElementById('status-buttons');
+  statusContainer.innerHTML = `
+    <button onclick="updateStatus('packed')" class="flex-1 py-2 text-xs rounded-2xl status-packed">Packed</button>
+    <button onclick="updateStatus('ontruck')" class="flex-1 py-2 text-xs rounded-2xl status-ontruck">On Truck</button>
+    <button onclick="updateStatus('arrived')" class="flex-1 py-2 text-xs rounded-2xl status-arrived">Arrived</button>
+    <button onclick="updateStatus('unpacked')" class="flex-1 py-2 text-xs rounded-2xl status-unpacked">Unpacked</button>
+  `;
+
+  renderItemsList(box);
+
+  const qrContainer = document.getElementById('modal-qr');
+  qrContainer.innerHTML = '';
+  new QRCode(qrContainer, {
+    text: box.id,
+    width: 180,
+    height: 180,
+    colorDark: "#000000",
+    colorLight: "#ffffff",
+    correctLevel: QRCode.CorrectLevel.H
+  });
+
+  document.getElementById('box-modal').classList.remove('hidden');
+  document.getElementById('box-modal').classList.add('flex');
+}
+
+function renderItemsList(box) {
+  const container = document.getElementById('modal-items');
+  if (!box.items || box.items.length === 0) {
+    container.innerHTML = `<div class="text-zinc-500 text-sm py-2">No items added yet. Tap the mic to speak.</div>`;
+    return;
+  }
+  
+  container.innerHTML = box.items.map((item, index) => `
+    <div class="flex items-center justify-between bg-zinc-800 rounded-2xl px-4 py-3 text-sm group">
+      <span>${item}</span>
+      <button onclick="removeItem(${index}); event.stopImmediatePropagation();" 
+              class="opacity-40 hover:opacity-100 text-red-400 px-2">×</button>
+    </div>
+  `).join('');
+}
+
+function addTypedItem() {
+  const input = document.getElementById('item-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  const box = boxes.find(b => b.id === currentBoxId);
+  if (!box.items) box.items = [];
+  box.items.push(text);
+  saveData();
+  renderItemsList(box);
+  renderBoxesList();
+  input.value = '';
+}
+
+function addItemToCurrentBox() {
+  const item = prompt("What item are you adding to this box?");
+  if (!item || !item.trim()) return;
+
+  const box = boxes.find(b => b.id === currentBoxId);
+  if (!box.items) box.items = [];
+  box.items.push(item.trim());
+  saveData();
+  renderItemsList(box);
+  renderBoxesList();
+}
+
+// ==================== VOICE INPUT (Microphone) ====================
+function startVoiceInput() {
+  const micBtn = document.getElementById('mic-btn');
+  const input = document.getElementById('item-input');
+
+  if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
+    alert("Voice input is not supported on this browser. Try Chrome on Android or the latest Safari.");
+    return;
+  }
+
+  if (recognition) {
+    recognition.stop();
+    recognition = null;
+    micBtn.classList.remove('listening');
+    return;
+  }
+
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SpeechRec();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.lang = 'en-US';
+
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript.trim();
+    if (transcript) {
+      const box = boxes.find(b => b.id === currentBoxId);
+      if (!box.items) box.items = [];
+      box.items.push(transcript);
+      saveData();
+      renderItemsList(box);
+      renderBoxesList();
+    }
+    micBtn.classList.remove('listening');
+    recognition = null;
+  };
+
+  recognition.onerror = (event) => {
+    console.error('Speech recognition error:', event);
+    micBtn.classList.remove('listening');
+    recognition = null;
+    if (event.error === 'no-speech') {
+      alert("Didn't hear anything. Try again.");
+    } else {
+      alert("Voice input error. Please try again or type instead.");
+    }
+  };
+
+  recognition.onend = () => {
+    micBtn.classList.remove('listening');
+    recognition = null;
+  };
+
+  try {
+    recognition.start();
+    micBtn.classList.add('listening');
+  } catch (e) {
+    alert("Could not start voice input. Please try again.");
+    micBtn.classList.remove('listening');
+    recognition = null;
+  }
+}
+
+function removeItem(index) {
+  const box = boxes.find(b => b.id === currentBoxId);
+  box.items.splice(index, 1);
+  saveData();
+  renderItemsList(box);
+  renderBoxesList();
+}
+
+function saveNotes() {
+  const box = boxes.find(b => b.id === currentBoxId);
+  box.notes = document.getElementById('modal-notes').value;
+  saveData();
+}
+
+function updateStatus(newStatus) {
+  const box = boxes.find(b => b.id === currentBoxId);
+  box.status = newStatus;
+  saveData();
+  renderBoxesList();
+  renderDashboard();
+  showBoxDetail(currentBoxId);
+}
+
+function closeModal() {
+  document.getElementById('box-modal').classList.remove('flex');
+  document.getElementById('box-modal').classList.add('hidden');
+  renderBoxesList();
+  renderDashboard();
+}
+
+function deleteCurrentBox() {
+  if (!confirm("Delete this box permanently?")) return;
+  boxes = boxes.filter(b => b.id !== currentBoxId);
+  saveData();
+  closeModal();
+  renderDashboard();
+}
+
+// ==================== PRINT LABEL ====================
+function printLabel() {
+  const box = boxes.find(b => b.id === currentBoxId);
+  if (!box) return;
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Box Label - ${box.id}</title>
+        <style>
+          body { font-family: system-ui; margin: 40px; text-align: center; }
+          .label { border: 3px solid black; padding: 30px; max-width: 500px; margin: 0 auto; }
+          .room { font-size: 42px; font-weight: bold; margin: 20px 0; }
+          .id { font-size: 28px; font-family: monospace; }
+        </style>
+      </head>
+      <body>
+        <div class="label">
+          <div style="font-size: 18px; color: #666;">MOVE TO DEBBIE LANE</div>
+          <div class="room">${box.room}</div>
+          <div id="print-qr"></div>
+          <div class="id">${box.id}</div>
+          <div style="margin-top: 20px; font-size: 14px; color: #444;">${box.notes || ''}</div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"><\/script>
+        <script>
+          setTimeout(() => {
+            new QRCode(document.getElementById('print-qr'), {
+              text: "${box.id}",
+              width: 220,
+              height: 220
+            });
+            window.print();
+          }, 300);
+        <\/script>
+      </body>
+    </html>
+  `);
+}
+
+// ==================== QR SCANNER ====================
+function startScanner() {
+  const qrReader = document.getElementById('qr-reader');
+  qrReader.innerHTML = '';
+  document.getElementById('scan-result').innerHTML = '';
+
+  html5QrCode = new Html5Qrcode("qr-reader");
+
+  html5QrCode.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: { width: 280, height: 280 } },
+    (decodedText) => {
+      stopScanner();
+      const foundBox = boxes.find(b => b.id === decodedText);
+      if (foundBox) {
+        document.getElementById('scan-result').innerHTML = 
+          `<span class="text-emerald-400">✓ Found ${decodedText}</span>`;
+        setTimeout(() => {
+          showBoxDetail(decodedText);
+          switchTab(1);
+        }, 600);
+      } else {
+        document.getElementById('scan-result').innerHTML = 
+          `<span class="text-red-400">Box ${decodedText} not found in this move.</span>`;
+      }
+    },
+    (errorMessage) => {}
+  ).catch(err => {
+    document.getElementById('scan-result').innerHTML = 
+      `<span class="text-red-400">Camera error: ${err}</span>`;
+  });
+}
+
+function stopScanner() {
+  if (html5QrCode) {
+    html5QrCode.stop().then(() => {
+      html5QrCode = null;
+      document.getElementById('qr-reader').innerHTML = '';
+    }).catch(() => {});
+  }
+}
+
+// ==================== EXPORT ====================
+function exportData() {
+  const dataStr = JSON.stringify(boxes, null, 2);
+  const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+  
+  const exportFileDefaultName = `moving-boxes-${new Date().toISOString().slice(0,10)}.json`;
+  
+  const linkElement = document.createElement('a');
+  linkElement.setAttribute('href', dataUri);
+  linkElement.setAttribute('download', exportFileDefaultName);
+  linkElement.click();
+}
+
+// ==================== INITIAL SETUP ====================
+function init() {
+  const filter = document.getElementById('room-filter');
+  defaultRooms.forEach(room => {
+    const opt = document.createElement('option');
+    opt.value = room;
+    opt.textContent = room;
+    filter.appendChild(opt);
+  });
+
+  renderDashboard();
+  renderBoxesList();
+
+  document.getElementById('search-input').addEventListener('keypress', function(e) {
+    if (e.key === "Enter") renderBoxesList();
+  });
+
+  if (boxes.length === 0) {
+    setTimeout(() => {
+      if (confirm("Welcome! Would you like to create your first moving box now?")) {
+        showNewBoxModal();
+      }
+    }, 1200);
+  }
+
+  console.log('%c[MoveBox QR] App ready with voice input.', 'color:#666');
+}
+
+init();
+</script>
+</body>
+</html>
