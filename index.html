@@ -31,15 +31,20 @@
       <h1 class="text-3xl font-bold tracking-tight">MoveBox QR</h1>
       <p class="text-zinc-400 text-sm">Debbie Lane Move • Know every box</p>
     </div>
-    <div class="flex items-center gap-3">
-      <button onclick="exportData()" 
-              class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm font-medium flex items-center gap-2">
-        <span>Export</span>
-      </button>
-      <button onclick="showNewBoxModal()" 
-              class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-semibold flex items-center gap-2 shadow-lg">
-        <span>+ New Box</span>
-      </button>
+    <div class="flex items-center gap-3 relative">
+      <button onclick="toggleHamburgerMenu(event)" id="hamburger-btn"
+              class="p-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-xl leading-none">☰</button>
+      <div id="hamburger-menu" onclick="event.stopPropagation()"
+           class="hidden absolute right-0 top-full mt-2 w-52 bg-zinc-800 border border-zinc-700 rounded-2xl shadow-xl z-[300] overflow-hidden">
+        <button onclick="showNewBoxModal(); closeHamburgerMenu()"
+                class="w-full text-left px-5 py-3.5 hover:bg-zinc-700 font-semibold text-emerald-400">+ New Box</button>
+        <div class="border-t border-zinc-700"></div>
+        <button onclick="exportData(); closeHamburgerMenu()"
+                class="w-full text-left px-5 py-3.5 hover:bg-zinc-700 text-sm">Export Data</button>
+        <div class="border-t border-zinc-700"></div>
+        <button onclick="window.MBSync && window.MBSync.openModal(); closeHamburgerMenu()"
+                class="w-full text-left px-5 py-3.5 hover:bg-zinc-700 text-sm">☁️ Cloud Sync</button>
+      </div>
     </div>
   </div>
 
@@ -84,10 +89,14 @@
       <input id="search-input" type="text" placeholder="Search boxes or items..." 
              class="flex-1 bg-zinc-900 border border-zinc-700 rounded-2xl px-5 py-3 text-lg focus:outline-none focus:border-emerald-500"
              oninput="renderBoxesList()">
-      <select id="room-filter" onchange="renderBoxesList()" 
+      <select id="room-filter" onchange="renderBoxesList()"
               class="bg-zinc-900 border border-zinc-700 rounded-2xl px-4 text-sm">
         <option value="">All Rooms</option>
       </select>
+      <button onclick="showBulkPrintModal()"
+              class="bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 rounded-2xl px-4 text-sm whitespace-nowrap">
+        🖨️ Bulk Print
+      </button>
     </div>
 
     <div id="boxes-list" class="space-y-3"></div>
@@ -184,9 +193,14 @@
 <script>
 // ==================== DATA ====================
 let boxes = JSON.parse(localStorage.getItem('movingBoxes') || '[]');
+window.__setBoxes = (b) => { boxes = b; };
 let currentBoxId = null;
 let html5QrCode = null;
 let recognition = null;
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 
 const defaultRooms = [
   "Master Bedroom", "Emma's Room", "Son's Room", "Kitchen", 
@@ -238,18 +252,23 @@ function renderDashboard() {
   });
 
   const container = document.getElementById('room-stats');
-  container.innerHTML = Object.keys(roomCounts).length === 0 
-    ? `<div class="col-span-full text-center py-8 text-zinc-500">No boxes yet. Create your first box!</div>`
-    : Object.entries(roomCounts).sort((a,b) => b[1]-a[1]).map(([room, count]) => `
-        <div onclick="filterByRoom('${room}')" 
+  if (Object.keys(roomCounts).length === 0) {
+    container.innerHTML = `<div class="col-span-full text-center py-8 text-zinc-500">No boxes yet. Create your first box!</div>`;
+  } else {
+    container.innerHTML = Object.entries(roomCounts).sort((a,b) => b[1]-a[1]).map(([room, count]) => `
+        <div data-room="${room.replace(/"/g, '&quot;')}"
              class="bg-zinc-900 hover:bg-zinc-800 cursor-pointer rounded-3xl p-5 flex justify-between items-center">
           <div>
-            <div class="font-semibold">${room}</div>
+            <div class="font-semibold">${escapeHtml(room)}</div>
             <div class="text-xs text-zinc-500">${count} box${count > 1 ? 'es' : ''}</div>
           </div>
           <div class="text-4xl font-bold text-emerald-400">${count}</div>
         </div>
       `).join('');
+    container.querySelectorAll('[data-room]').forEach(el => {
+      el.addEventListener('click', () => filterByRoom(el.dataset.room));
+    });
+  }
 }
 
 function filterByRoom(room) {
@@ -288,7 +307,7 @@ function renderBoxesList() {
         <div class="flex justify-between items-start">
           <div>
             <div class="font-mono text-emerald-400 text-sm">${box.id}</div>
-            <div class="text-2xl font-semibold">${box.room}</div>
+            <div class="text-2xl font-semibold">${escapeHtml(box.room)}</div>
           </div>
           <div class="text-right">
             <div class="text-xs px-3 py-1 rounded-full ${getStatusClass(box.status)}">${getStatusLabel(box.status)}</div>
@@ -383,6 +402,7 @@ function createNewBox(btn) {
   
   showBoxDetail(newBox.id);
   renderDashboard();
+  populateRoomFilter();
 }
 
 // ==================== BOX DETAIL + VOICE INPUT ====================
@@ -429,7 +449,7 @@ function renderItemsList(box) {
   
   container.innerHTML = box.items.map((item, index) => `
     <div class="flex items-center justify-between bg-zinc-800 rounded-2xl px-4 py-3 text-sm group">
-      <span>${item}</span>
+      <span>${escapeHtml(item)}</span>
       <button onclick="removeItem(${index}); event.stopImmediatePropagation();" 
               class="opacity-40 hover:opacity-100 text-red-400 px-2">×</button>
     </div>
@@ -560,7 +580,155 @@ function deleteCurrentBox() {
   boxes = boxes.filter(b => b.id !== currentBoxId);
   saveData();
   closeModal();
-  renderDashboard();
+}
+
+// ==================== BULK PRINT ====================
+function showBulkPrintModal() {
+  const activeRoom = document.getElementById('room-filter').value;
+  const candidates = activeRoom ? boxes.filter(b => b.room === activeRoom) : boxes;
+
+  if (candidates.length === 0) {
+    alert('No boxes to print.');
+    return;
+  }
+
+  const listHTML = candidates.map(box => `
+    <label class="flex items-center gap-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-4 py-3 cursor-pointer">
+      <input type="checkbox" class="bulk-print-cb w-4 h-4 accent-emerald-500" value="${box.id}" onchange="updateBulkPrintCounter()">
+      <span class="font-mono text-emerald-400 text-sm">${box.id}</span>
+      <span class="text-zinc-200">${escapeHtml(box.room)}</span>
+    </label>
+  `).join('');
+
+  const modalHTML = `
+    <div id="bulk-print-modal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-[200]"
+         onclick="if(event.target.id==='bulk-print-modal') this.remove()">
+      <div onclick="event.stopImmediatePropagation()"
+           class="bg-zinc-900 rounded-3xl p-6 w-full max-w-md mx-4 flex flex-col" style="max-height:85vh">
+        <h3 class="text-2xl font-semibold mb-4">🖨️ Bulk Print Labels</h3>
+
+        <div class="flex gap-2 mb-3">
+          <button onclick="document.querySelectorAll('.bulk-print-cb').forEach(c=>c.checked=true); updateBulkPrintCounter();"
+                  class="flex-1 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-2xl text-sm">Select All</button>
+          <button onclick="document.querySelectorAll('.bulk-print-cb').forEach(c=>c.checked=false); updateBulkPrintCounter();"
+                  class="flex-1 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-2xl text-sm">Select None</button>
+        </div>
+
+        <div class="overflow-y-auto flex-1 space-y-2 mb-4 pr-1">
+          ${listHTML}
+        </div>
+
+        <div id="bulk-print-counter" class="text-sm text-zinc-400 text-center mb-4">0 boxes selected = 0 page(s)</div>
+
+        <div class="flex gap-3">
+          <button onclick="document.getElementById('bulk-print-modal').remove()"
+                  class="flex-1 py-3 bg-zinc-800 rounded-2xl">Cancel</button>
+          <button id="bulk-print-go" onclick="runBulkPrint()" disabled
+                  class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-2xl font-semibold">
+            Print Selected
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+}
+
+function updateBulkPrintCounter() {
+  const checked = document.querySelectorAll('.bulk-print-cb:checked').length;
+  const pages = Math.ceil(checked / 2);
+  const counter = document.getElementById('bulk-print-counter');
+  const btn = document.getElementById('bulk-print-go');
+  if (counter) counter.textContent = `${checked} box${checked !== 1 ? 'es' : ''} selected = ${pages} page${pages !== 1 ? 's' : ''}`;
+  if (btn) btn.disabled = checked === 0;
+}
+
+function runBulkPrint() {
+  const ids = Array.from(document.querySelectorAll('.bulk-print-cb:checked')).map(cb => cb.value);
+  if (ids.length === 0) return;
+  document.getElementById('bulk-print-modal').remove();
+  printSelectedLabels(ids);
+}
+
+function printSelectedLabels(boxIds) {
+  const selectedBoxes = boxIds.map(id => boxes.find(b => b.id === id)).filter(Boolean);
+  if (selectedBoxes.length === 0) return;
+
+  function labelHTML(box, idx) {
+    return `
+      <div class="label">
+        <div class="header">MOVE TO DEBBIE LANE</div>
+        <div class="room">${escapeHtml(box.room)}</div>
+        <div class="qr" id="qr-${idx}"></div>
+        <div class="id">${box.id}</div>
+        ${box.notes ? `<div class="notes">${escapeHtml(box.notes)}</div>` : ''}
+      </div>`;
+  }
+
+  const pagesHTML = [];
+  for (let i = 0; i < selectedBoxes.length; i += 2) {
+    const pair = selectedBoxes.slice(i, i + 2);
+    pagesHTML.push(`<div class="page">${pair.map((box, j) => labelHTML(box, i + j)).join('')}</div>`);
+  }
+
+  const qrScript = selectedBoxes.map((box, idx) => `
+    new QRCode(document.getElementById('qr-${idx}'), {
+      text: ${JSON.stringify(box.id)},
+      width: 260,
+      height: 260,
+      colorDark: "#000000",
+      colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.H
+    });`).join('\n');
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Box Labels</title>
+  <style>
+    @page { size: letter; margin: 0.4in; }
+    body { font-family: system-ui; margin: 0; padding: 0; }
+    .page {
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 0.2in;
+      width: 7.7in;
+      height: 10.2in;
+      page-break-after: always;
+    }
+    .page:last-child { page-break-after: auto; }
+    .label {
+      border: 3px solid black;
+      padding: 0.3in;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      page-break-inside: avoid;
+    }
+    .label .header { font-size: 16px; color: #666; letter-spacing: 2px; }
+    .label .room { font-size: 48px; font-weight: bold; margin: 12px 0; }
+    .label .id { font-size: 24px; font-family: monospace; margin-top: 12px; }
+    .label .notes { font-size: 14px; color: #444; margin-top: 8px; max-width: 6in; }
+    .label .qr { margin: 12px 0; }
+  </style>
+</head>
+<body>
+${pagesHTML.join('\n')}
+<script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"><\/script>
+<script>
+setTimeout(function() {
+${qrScript}
+  window.print();
+}, 600);
+<\/script>
+</body>
+</html>`);
+  printWindow.document.close();
 }
 
 // ==================== PRINT LABEL ====================
@@ -586,7 +754,7 @@ function printLabel() {
           <div class="room">${box.room}</div>
           <div id="print-qr"></div>
           <div class="id">${box.id}</div>
-          <div style="margin-top: 20px; font-size: 14px; color: #444;">${box.notes || ''}</div>
+          <div style="margin-top: 20px; font-size: 14px; color: #444;">${escapeHtml(box.notes || '')}</div>
         </div>
         <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"><\/script>
         <script>
@@ -602,6 +770,7 @@ function printLabel() {
       </body>
     </html>
   `);
+  printWindow.document.close();
 }
 
 // ==================== QR SCANNER ====================
@@ -660,14 +829,17 @@ function exportData() {
 }
 
 // ==================== INITIAL SETUP ====================
-function init() {
+function populateRoomFilter(){
   const filter = document.getElementById('room-filter');
-  defaultRooms.forEach(room => {
-    const opt = document.createElement('option');
-    opt.value = room;
-    opt.textContent = room;
-    filter.appendChild(opt);
-  });
+  const currentVal = filter.value;
+  const allRooms = Array.from(new Set([...defaultRooms, ...boxes.map(b => b.room)])).sort();
+  filter.innerHTML = '<option value="">All Rooms</option>' +
+    allRooms.map(r => `<option value="${r.replace(/"/g, '&quot;')}">${r}</option>`).join('');
+  filter.value = currentVal;
+}
+
+function init() {
+  populateRoomFilter();
 
   renderDashboard();
   renderBoxesList();
@@ -688,6 +860,444 @@ function init() {
 }
 
 init();
+
+// ==================== HAMBURGER MENU ====================
+function toggleHamburgerMenu(event) {
+  event.stopPropagation();
+  document.getElementById('hamburger-menu').classList.toggle('hidden');
+}
+
+function closeHamburgerMenu() {
+  const menu = document.getElementById('hamburger-menu');
+  if (menu) menu.classList.add('hidden');
+}
+
+document.addEventListener('click', closeHamburgerMenu);
+</script>
+<!-- ============================================================
+     MoveBox QR — Google Drive Auto Sync
+     Adapted from your Nickey Dispatch sync system
+     - Auto pull on load + tab focus
+     - Auto push on data change (30s debounce)
+     - One sign-in works across phone + Windows
+     ============================================================ -->
+<script>
+(function(){
+  'use strict';
+
+  // ================== CONFIG ==================
+  const CLIENT_ID = '1067375485374-cn97feb2m9bj4fr067uab62d0p1j4qkk.apps.googleusercontent.com';
+  const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email';
+  const FOLDER_NAME = 'MoveBox QR Data';
+  const DATA_FILE = 'movebox-data.json';
+  const PUSH_DEBOUNCE = 30000; // 30 seconds
+  const TOKEN_BUFFER = 600000; // refresh 10 min early
+
+  // Only sync the main boxes data for now
+  const SYNC_KEYS = ['movingBoxes'];
+  const SYNC_KEY_SET = new Set(SYNC_KEYS);
+
+  // ================== STATE ==================
+  let tokenClient = null;
+  let accessToken = null;
+  let tokenExpiry = 0;
+  let userEmail = null;
+  let isSignedIn = false;
+  let folderId = null;
+  let driveFileId = null;
+  let initialPullDone = false;
+  let pushTimer = null;
+  let lastError = null;
+  let isSyncing = false;
+  let silentRefreshPending = false;
+
+  const _persisted = {
+    token: localStorage.getItem('mbsync_accessToken'),
+    expiry: parseInt(localStorage.getItem('mbsync_tokenExpiry') || '0', 10),
+    email: localStorage.getItem('mbsync_userEmail'),
+    folderId: localStorage.getItem('mbsync_folderId'),
+    fileId: localStorage.getItem('mbsync_fileId')
+  };
+
+  // ================== HELPERS ==================
+  function log(msg, data){ console.log('[MoveBoxSync]', msg, data !== undefined ? data : ''); }
+  function logError(msg, err){
+    const detail = err ? (err.message || JSON.stringify(err)) : '';
+    lastError = detail ? msg + ': ' + detail : msg;
+    console.error('[MoveBoxSync ERROR]', lastError);
+  }
+
+  const _rawSet = localStorage.setItem.bind(localStorage);
+  localStorage.setItem = function(key, value){
+    _rawSet(key, value);
+    if (SYNC_KEY_SET.has(key)){
+      _rawSet('mbsync_ts_' + key, new Date().toISOString());
+      if (isSignedIn && initialPullDone) debouncedPush();
+    }
+  };
+
+  function saveToken(token, expiresInSec, email){
+    accessToken = token;
+    tokenExpiry = Date.now() + expiresInSec * 1000;
+    userEmail = email || userEmail;
+    isSignedIn = true;
+    _rawSet('mbsync_accessToken', token);
+    _rawSet('mbsync_tokenExpiry', String(tokenExpiry));
+    if (userEmail) _rawSet('mbsync_userEmail', userEmail);
+  }
+
+  function clearToken(){
+    accessToken = null; tokenExpiry = 0; userEmail = null;
+    isSignedIn = false; folderId = null; driveFileId = null;
+    initialPullDone = false;
+    ['mbsync_accessToken','mbsync_tokenExpiry','mbsync_userEmail',
+     'mbsync_folderId','mbsync_fileId'].forEach(k => localStorage.removeItem(k));
+  }
+
+  function tokenValid(){
+    return !!(accessToken && Date.now() < tokenExpiry - TOKEN_BUFFER);
+  }
+
+  function scheduleRefresh(){
+    const delay = tokenExpiry - Date.now() - TOKEN_BUFFER;
+    if (delay > 0) setTimeout(silentRefresh, delay);
+  }
+
+  function silentRefresh(){
+    if (!tokenClient || silentRefreshPending) return;
+    silentRefreshPending = true;
+    const hint = userEmail || _persisted.email || localStorage.getItem('mbsync_loginHint') || '';
+    tokenClient.requestAccessToken({ prompt: '', ...(hint ? { login_hint: hint } : {}) });
+  }
+
+  // ================== UI ==================
+  function injectStyles(){
+    if (document.getElementById('mbsync-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'mbsync-styles';
+    s.textContent = `
+      #mbsyncPill{position:fixed;bottom:14px;right:14px;z-index:9998;
+        background:rgba(0,0,0,0.92);border:1px solid #444;color:#aaa;
+        font-size:11px;padding:6px 12px;border-radius:14px;cursor:pointer;
+        display:flex;align-items:center;gap:6px;opacity:0;transition:opacity 0.3s;}
+      #mbsyncPill.show{opacity:1;}
+      #mbsyncPill.signed-in{border-color:#10b981;color:#6ee7b7;}
+      #mbsyncPill.syncing{border-color:#f59e0b;color:#fcd34d;}
+      #mbsyncPill.error{border-color:#ef4444;color:#fca5a5;}
+      #mbsyncPill.offline{border-color:#666;color:#888;}
+      .mbsync-dot{width:7px;height:7px;border-radius:50%;background:#555;flex-shrink:0;}
+      .mbsync-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:none;align-items:center;justify-content:center;padding:20px;}
+      .mbsync-modal-bg.show{display:flex;}
+      .mbsync-modal{background:#111;border:2px solid #10b981;border-radius:16px;padding:24px;max-width:360px;width:100%;text-align:center;font-family:system-ui;}
+      .mbsync-modal h3{color:#10b981;font-size:18px;margin-bottom:12px;}
+      .mbsync-info{background:#1f2937;border:1px solid #374151;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;color:#d1d5db;text-align:left;}
+      .mbsync-email{color:#10b981;font-weight:700;}
+      .mbsync-btn{padding:12px 16px;border-radius:10px;font-weight:700;cursor:pointer;border:none;font-size:14px;}
+      .mbsync-btn.primary{background:#10b981;color:#111;}
+      .mbsync-btn.danger{background:#7f1d1d;color:#fca5a5;border:1px solid #ef4444;}
+      .mbsync-btn.cancel{background:#374151;color:#d1d5db;border:1px solid #4b5563;}
+    `;
+    document.head.appendChild(s);
+  }
+
+  function injectPill(){
+    if (document.getElementById('mbsyncPill')) return;
+    const pill = document.createElement('div');
+    pill.id = 'mbsyncPill';
+    pill.innerHTML = '<span class="mbsync-dot"></span><span id="mbsyncPillText">Cloud Sync</span>';
+    pill.onclick = () => window.MBSync.openModal();
+    document.body.appendChild(pill);
+  }
+
+  function injectModal(){
+    if (document.getElementById('mbsyncModalBg')) return;
+    const bg = document.createElement('div');
+    bg.id = 'mbsyncModalBg';
+    bg.className = 'mbsync-modal-bg';
+    bg.innerHTML = `<div class="mbsync-modal"><h3>☁️ MoveBox Cloud Sync</h3><div id="mbsyncModalBody"></div></div>`;
+    bg.onclick = e => { if (e.target === bg) bg.classList.remove('show'); };
+    document.body.appendChild(bg);
+  }
+
+  function showPill(state, text, duration){
+    const pill = document.getElementById('mbsyncPill');
+    const txt = document.getElementById('mbsyncPillText');
+    if (!pill || !txt) return;
+    pill.className = 'show' + (state ? ' ' + state : '');
+    txt.textContent = text;
+    if (duration && state !== 'signed-in') setTimeout(() => pill.classList.remove('show'), duration);
+  }
+
+  function openModal(){
+    const bg = document.getElementById('mbsyncModalBg');
+    const body = document.getElementById('mbsyncModalBody');
+    if (!bg || !body) return;
+
+    const last = localStorage.getItem('mbsync_lastSync');
+    const lastStr = last ? new Date(last).toLocaleString() : 'Never';
+
+    if (isSignedIn){
+      body.innerHTML = `
+        <div class="mbsync-info">
+          <strong>✓ Signed in</strong><br>
+          <span class="mbsync-email">${userEmail || 'your account'}</span>
+        </div>
+        <div class="mbsync-info">Last sync: ${lastStr}${lastError ? '<br><span style="color:#f87171">⚠ ' + lastError + '</span>' : ''}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="mbsync-btn primary" onclick="window.MBSync.syncNow()">⟳ Sync Now</button>
+          <button class="mbsync-btn danger" onclick="window.MBSync.signOut()">Sign Out</button>
+          <button class="mbsync-btn cancel" onclick="document.getElementById('mbsyncModalBg').classList.remove('show')">Close</button>
+        </div>`;
+    } else {
+      body.innerHTML = `
+        <p style="color:#d1d5db;margin-bottom:16px">Sign in with Google to automatically sync your boxes across phone, Windows, and family devices.</p>
+        <div class="mbsync-info"><strong>Your data stays private</strong><br>Saved only in your Google Drive.<br>Auto-syncs when you make changes.</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="mbsync-btn primary" onclick="window.MBSync.signIn()">🔐 Sign in with Google</button>
+          <button class="mbsync-btn cancel" onclick="document.getElementById('mbsyncModalBg').classList.remove('show')">Cancel</button>
+        </div>`;
+    }
+    bg.classList.add('show');
+  }
+
+  // ================== GOOGLE AUTH ==================
+  function loadGIS(){
+    return new Promise((resolve, reject) => {
+      if (window.google?.accounts) return resolve();
+      const s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Failed to load Google Identity Services'));
+      document.head.appendChild(s);
+    });
+  }
+
+  function ensureTokenClient(){
+    if (tokenClient) return tokenClient;
+    if (!window.google?.accounts?.oauth2) return null;
+    tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPES,
+      callback: handleTokenResponse,
+      error_callback(err){
+        if (err.type === 'popup_closed') return;
+        logError('OAuth error', err);
+        showPill('error', 'Sign-in failed', 4000);
+      }
+    });
+    return tokenClient;
+  }
+
+  function handleTokenResponse(resp){
+    silentRefreshPending = false;
+    if (resp.error){
+      if (resp.error === 'interaction_required' || resp.error === 'access_denied'){
+        isSignedIn = false;
+        showPill(null, 'Sign in to sync', 6000);
+        return;
+      }
+      logError('Token error', resp);
+      showPill('error', 'Sign-in failed', 5000);
+      setTimeout(silentRefresh, 30000);
+      return;
+    }
+    const expiresIn = parseInt(resp.expires_in || '3600', 10);
+    const emailPromise = userEmail ? Promise.resolve() : fetchUserEmail(resp.access_token);
+    emailPromise.then(() => {
+      saveToken(resp.access_token, expiresIn, userEmail);
+      scheduleRefresh();
+      if (!initialPullDone){
+        showPill('syncing', 'Setting up sync...');
+        setupAndPull().then(() => pushToDrive());
+      } else {
+        pushToDrive();
+      }
+    }).catch(err => logError('Post-auth failed', err));
+  }
+
+  function fetchUserEmail(token){
+    return fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: 'Bearer ' + token }
+    }).then(r => r.json()).then(d => {
+      if (d.email){
+        userEmail = d.email;
+        _rawSet('mbsync_userEmail', userEmail);
+        _rawSet('mbsync_loginHint', userEmail);
+      }
+    }).catch(() => {});
+  }
+
+  // ================== DRIVE API ==================
+  function driveReq(method, url, body, contentType){
+    const headers = { Authorization: 'Bearer ' + accessToken };
+    if (contentType) headers['Content-Type'] = contentType;
+    return fetch(url, { method, headers, body }).then(r => {
+      if (r.status === 401){ silentRefresh(); throw new Error('Token expired'); }
+      if (r.status === 204) return null;
+      return r.json().then(data => { if (!r.ok) throw new Error(data?.error?.message || 'HTTP ' + r.status); return data; });
+    });
+  }
+
+  function ensureFolder(){
+    if (folderId) return Promise.resolve(folderId);
+    if (_persisted.folderId){ folderId = _persisted.folderId; return Promise.resolve(folderId); }
+    const q = encodeURIComponent(`name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+    return driveReq('GET', `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`)
+      .then(data => {
+        if (data.files?.length) folderId = data.files[0].id;
+        else return driveReq('POST', 'https://www.googleapis.com/drive/v3/files',
+          JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' }), 'application/json')
+          .then(f => { folderId = f.id; });
+      }).then(() => { _rawSet('mbsync_folderId', folderId); return folderId; });
+  }
+
+  function ensureDataFile(){
+    if (driveFileId) return Promise.resolve(driveFileId);
+    if (_persisted.fileId){ driveFileId = _persisted.fileId; return Promise.resolve(driveFileId); }
+    return ensureFolder().then(fid => {
+      const q = encodeURIComponent(`name='${DATA_FILE}' and '${fid}' in parents and trashed=false`);
+      return driveReq('GET', `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
+    }).then(data => {
+      if (data.files?.length){ driveFileId = data.files[0].id; _rawSet('mbsync_fileId', driveFileId); return driveFileId; }
+      return uploadFile(null, buildPayload()).then(f => { driveFileId = f.id; _rawSet('mbsync_fileId', driveFileId); return driveFileId; });
+    });
+  }
+
+  function buildPayload(){
+    const payload = { version: 1, device: /Mobile|Android/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop', syncedAt: new Date().toISOString(), keys: {} };
+    SYNC_KEYS.forEach(k => {
+      const val = localStorage.getItem(k);
+      if (val !== null) payload.keys[k] = { value: val, updatedAt: localStorage.getItem('mbsync_ts_' + k) || new Date(0).toISOString() };
+    });
+    return payload;
+  }
+
+  function applyPayload(payload){
+    if (!payload?.keys) return 0;
+    let changed = 0;
+    SYNC_KEYS.forEach(k => {
+      const remote = payload.keys[k];
+      if (!remote) return;
+      const localTs = localStorage.getItem('mbsync_ts_' + k) || new Date(0).toISOString();
+      if (remote.updatedAt > localTs){
+        _rawSet(k, remote.value);
+        _rawSet('mbsync_ts_' + k, remote.updatedAt);
+        changed++;
+      }
+    });
+    if (changed > 0 && typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI();
+    return changed;
+  }
+
+  function uploadFile(fileId, data){
+    const json = JSON.stringify(data, null, 2);
+    const boundary = 'mbsync_' + Date.now();
+    const meta = JSON.stringify({ name: DATA_FILE, mimeType: 'application/json', ...(folderId && !fileId ? { parents: [folderId] } : {}) });
+    const body = [`--${boundary}`, 'Content-Type: application/json; charset=UTF-8', '', meta, `--${boundary}`, 'Content-Type: application/json', '', json, `--${boundary}--`].join('\r\n');
+    const url = fileId ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart` : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+    return driveReq(fileId ? 'PATCH' : 'POST', url, body, `multipart/related; boundary="${boundary}"`);
+  }
+
+  function pullFromDrive(){
+    if (!tokenValid()) return Promise.resolve(0);
+    return ensureDataFile().then(fid => fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media`, { headers: { Authorization: 'Bearer ' + accessToken } }))
+      .then(r => { if (!r.ok) throw new Error('Fetch failed'); return r.json(); })
+      .then(data => { const changed = applyPayload(data); _rawSet('mbsync_lastSync', new Date().toISOString()); return changed; });
+  }
+
+  function pushToDrive(){
+    if (!tokenValid() || !initialPullDone || isSyncing) return;
+    if (!navigator.onLine){ showPill('offline', 'Offline', 3000); return; }
+    isSyncing = true; showPill('syncing', 'Syncing...');
+    ensureDataFile().then(fid => uploadFile(fid, buildPayload()))
+      .then(() => { isSyncing = false; _rawSet('mbsync_lastSync', new Date().toISOString()); showPill('signed-in', '✓ Synced', 2500); })
+      .catch(err => { isSyncing = false; logError('Push failed', err); showPill('error', 'Sync failed — retrying', 5000); setTimeout(() => { if (isSignedIn) pushToDrive(); }, 60000); });
+  }
+
+  function debouncedPush(){
+    if (pushTimer) clearTimeout(pushTimer);
+    pushTimer = setTimeout(pushToDrive, PUSH_DEBOUNCE);
+  }
+
+  function setupAndPull(){
+    return ensureFolder().then(() => ensureDataFile()).then(() => pullFromDrive())
+      .then(changed => { initialPullDone = true; if (changed > 0 && typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); showPill('signed-in', '✓ Synced', 2500); });
+  }
+
+  // ================== PUBLIC API ==================
+  window.MBSync = {
+    signIn(){
+      showPill('syncing', 'Loading...');
+      loadGIS().then(() => { const tc = ensureTokenClient(); if (tc) tc.requestAccessToken({ prompt: 'select_account' }); })
+        .catch(() => showPill('error', 'Sign-in unavailable', 4000));
+    },
+    signOut(){
+      if (accessToken && window.google?.accounts?.oauth2) try { window.google.accounts.oauth2.revoke(accessToken, () => {}); } catch(e){}
+      clearToken();
+      if (pushTimer){ clearTimeout(pushTimer); pushTimer = null; }
+      const pill = document.getElementById('mbsyncPill'); if (pill) pill.classList.remove('show');
+      const bg = document.getElementById('mbsyncModalBg'); if (bg) bg.classList.remove('show');
+    },
+    syncNow(){
+      if (!isSignedIn) return;
+      const bg = document.getElementById('mbsyncModalBg'); if (bg) bg.classList.remove('show');
+      showPill('syncing', 'Syncing...');
+      pullFromDrive().then(changed => { if (changed > 0 && typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); }).finally(() => pushToDrive());
+    },
+    openModal,
+    isSignedIn: () => isSignedIn,
+    getEmail: () => userEmail
+  };
+
+  // ================== INIT ==================
+  function initSync(){
+    injectStyles();
+    injectPill();
+    injectModal();
+
+    const stillGood = _persisted.token && _persisted.expiry > Date.now() + 60000;
+    if (stillGood){
+      accessToken = _persisted.token; tokenExpiry = _persisted.expiry; userEmail = _persisted.email;
+      folderId = _persisted.folderId || null; driveFileId = _persisted.fileId || null;
+      isSignedIn = true;
+      showPill('syncing', 'Reconnecting...');
+      loadGIS().then(() => { ensureTokenClient(); scheduleRefresh(); return setupAndPull(); })
+        .then(() => showPill('signed-in', '✓ Synced', 2500))
+        .catch(() => silentRefresh());
+    } else if (_persisted.email || localStorage.getItem('mbsync_loginHint')){
+      userEmail = _persisted.email || localStorage.getItem('mbsync_loginHint');
+      silentRefreshPending = true;
+      showPill('syncing', 'Reconnecting...');
+      loadGIS().then(() => { ensureTokenClient(); silentRefresh(); }).catch(() => showPill(null, 'Sign in to sync', 5000));
+    } else {
+      showPill(null, 'Cloud Sync', 3000);
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initSync);
+  else setTimeout(initSync, 120);
+
+  // Expose a helper so applyPayload can refresh the UI
+  window.refreshMoveBoxUI = function(){
+    try {
+      if (window.__setBoxes) {
+        window.__setBoxes(JSON.parse(localStorage.getItem('movingBoxes') || '[]'));
+      }
+      if (typeof renderDashboard === 'function') renderDashboard();
+      if (typeof renderBoxesList === 'function') renderBoxesList();
+      const modal = document.getElementById('box-modal');
+      if (modal && !modal.classList.contains('hidden') && currentBoxId && typeof showBoxDetail === 'function') {
+        showBoxDetail(currentBoxId);
+      }
+    } catch(e){}
+  };
+
+  // Pull fresh data when user returns to the tab
+  window.addEventListener('focus', () => {
+    if (isSignedIn && initialPullDone) pullFromDrive().then(changed => { if (changed > 0 && typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); });
+  });
+
+})();
 </script>
 </body>
 </html>
