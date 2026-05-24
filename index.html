@@ -193,7 +193,9 @@
 <script>
 // ==================== DATA ====================
 let boxes = JSON.parse(localStorage.getItem('movingBoxes') || '[]');
-window.__setBoxes = (b) => { boxes = b; };
+window.__getBoxes = () => boxes;
+window.__setBoxes = (newBoxes) => { boxes = newBoxes; };
+window.__reloadBoxes = () => { boxes = JSON.parse(localStorage.getItem('movingBoxes') || '[]'); };
 let currentBoxId = null;
 let html5QrCode = null;
 let recognition = null;
@@ -890,7 +892,7 @@ document.addEventListener('click', closeHamburgerMenu);
   const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email';
   const FOLDER_NAME = 'MoveBox QR Data';
   const DATA_FILE = 'movebox-data.json';
-  const PUSH_DEBOUNCE = 30000; // 30 seconds
+  const PUSH_DEBOUNCE = 5000; // 5 seconds
   const TOKEN_BUFFER = 600000; // refresh 10 min early
 
   // Only sync the main boxes data for now
@@ -1221,7 +1223,7 @@ document.addEventListener('click', closeHamburgerMenu);
 
   function setupAndPull(){
     return ensureFolder().then(() => ensureDataFile()).then(() => pullFromDrive())
-      .then(changed => { initialPullDone = true; if (changed > 0 && typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); showPill('signed-in', '✓ Synced', 2500); });
+      .then(() => { initialPullDone = true; if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); showPill('signed-in', '✓ Synced', 2500); });
   }
 
   // ================== PUBLIC API ==================
@@ -1242,7 +1244,7 @@ document.addEventListener('click', closeHamburgerMenu);
       if (!isSignedIn) return;
       const bg = document.getElementById('mbsyncModalBg'); if (bg) bg.classList.remove('show');
       showPill('syncing', 'Syncing...');
-      pullFromDrive().then(changed => { if (changed > 0 && typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); }).finally(() => pushToDrive());
+      pullFromDrive().then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); }).finally(() => pushToDrive());
     },
     openModal,
     isSignedIn: () => isSignedIn,
@@ -1280,21 +1282,32 @@ document.addEventListener('click', closeHamburgerMenu);
   // Expose a helper so applyPayload can refresh the UI
   window.refreshMoveBoxUI = function(){
     try {
-      if (window.__setBoxes) {
-        window.__setBoxes(JSON.parse(localStorage.getItem('movingBoxes') || '[]'));
-      }
+      if (window.__reloadBoxes) window.__reloadBoxes();
       if (typeof renderDashboard === 'function') renderDashboard();
       if (typeof renderBoxesList === 'function') renderBoxesList();
       const modal = document.getElementById('box-modal');
       if (modal && !modal.classList.contains('hidden') && currentBoxId && typeof showBoxDetail === 'function') {
         showBoxDetail(currentBoxId);
       }
-    } catch(e){}
+    } catch(e){ console.error('[refreshMoveBoxUI]', e); }
   };
 
   // Pull fresh data when user returns to the tab
   window.addEventListener('focus', () => {
-    if (isSignedIn && initialPullDone) pullFromDrive().then(changed => { if (changed > 0 && typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); });
+    if (isSignedIn && initialPullDone) pullFromDrive().then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); });
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && isSignedIn && initialPullDone) {
+      pullFromDrive().then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); });
+    }
+  });
+
+  window.addEventListener('beforeunload', () => {
+    if (isSignedIn && initialPullDone && pushTimer) {
+      clearTimeout(pushTimer);
+      try { pushToDrive(); } catch(e){}
+    }
   });
 
 })();
