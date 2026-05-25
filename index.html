@@ -135,12 +135,16 @@
   <div onclick="event.stopImmediatePropagation()" 
        class="bg-zinc-900 w-full md:w-[520px] md:rounded-3xl md:m-4 rounded-t-3xl p-6 max-h-[92vh] overflow-auto">
     
-    <div class="flex justify-between items-start mb-4">
-      <div>
-        <div id="modal-box-id" class="font-mono text-emerald-400 text-xl font-bold"></div>
-        <div id="modal-room" class="text-3xl font-semibold"></div>
+    <div class="flex justify-between items-start mb-4 gap-3">
+      <button onclick="closeModal()"
+              class="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm font-medium flex-shrink-0">
+        ← Back
+      </button>
+      <div class="flex-1 text-right">
+        <div id="modal-box-id" class="font-mono text-emerald-400 text-sm font-bold"></div>
+        <div id="modal-room" class="text-2xl font-semibold"></div>
       </div>
-      <button onclick="closeModal()" class="text-3xl leading-none text-zinc-500 hover:text-white">×</button>
+      <button onclick="closeModal()" class="text-3xl leading-none text-zinc-500 hover:text-white flex-shrink-0">×</button>
     </div>
 
     <!-- Status -->
@@ -565,14 +569,17 @@ function updateStatus(newStatus) {
   const box = boxes.find(b => b.id === currentBoxId);
   box.status = newStatus;
   saveData();
+  console.log('[MoveBox] Status changed to', newStatus, 'for', currentBoxId, '— sync push should fire within 5 seconds');
   renderBoxesList();
   renderDashboard();
   showBoxDetail(currentBoxId);
 }
 
 function closeModal() {
-  document.getElementById('box-modal').classList.remove('flex');
-  document.getElementById('box-modal').classList.add('hidden');
+  const modal = document.getElementById('box-modal');
+  modal.classList.remove('flex');
+  modal.classList.add('hidden');
+  currentBoxId = null;
   renderBoxesList();
   renderDashboard();
 }
@@ -581,7 +588,14 @@ function deleteCurrentBox() {
   if (!confirm("Delete this box permanently?")) return;
   boxes = boxes.filter(b => b.id !== currentBoxId);
   saveData();
-  closeModal();
+  console.log('[MoveBox] Box deleted:', currentBoxId, '— sync push should fire within 5 seconds');
+  currentBoxId = null;
+  const modal = document.getElementById('box-modal');
+  modal.classList.remove('flex');
+  modal.classList.add('hidden');
+  switchTab(0);
+  renderDashboard();
+  renderBoxesList();
 }
 
 // ==================== BULK PRINT ====================
@@ -934,7 +948,12 @@ document.addEventListener('click', closeHamburgerMenu);
     _rawSet(key, value);
     if (SYNC_KEY_SET.has(key)){
       _rawSet('mbsync_ts_' + key, new Date().toISOString());
-      if (isSignedIn && initialPullDone) debouncedPush();
+      log('Local change detected for ' + key + ' — push scheduled');
+      if (isSignedIn && initialPullDone) {
+        debouncedPush();
+      } else {
+        log('Push skipped — not signed in or initial pull not done', { isSignedIn, initialPullDone });
+      }
     }
   };
 
