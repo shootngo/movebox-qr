@@ -889,9 +889,9 @@ document.addEventListener('click', closeHamburgerMenu);
 
   // ================== CONFIG ==================
   const CLIENT_ID = '1067375485374-cn97feb2m9bj4fr067uab62d0p1j4qkk.apps.googleusercontent.com';
-  const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email';
+  const SCOPES = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email';
   const FOLDER_NAME = 'MoveBox QR Data';
-  const DATA_FILE = 'movebox-data.json';
+  const DATA_FILE = 'movebox-shared-data.json';
   const PUSH_DEBOUNCE = 5000; // 5 seconds
   const TOKEN_BUFFER = 600000; // refresh 10 min early
 
@@ -954,6 +954,7 @@ document.addEventListener('click', closeHamburgerMenu);
     initialPullDone = false;
     ['mbsync_accessToken','mbsync_tokenExpiry','mbsync_userEmail',
      'mbsync_folderId','mbsync_fileId'].forEach(k => localStorage.removeItem(k));
+    _persisted.token = null; _persisted.expiry = 0; _persisted.email = null; _persisted.folderId = null; _persisted.fileId = null;
   }
 
   function tokenValid(){
@@ -1045,6 +1046,10 @@ document.addEventListener('click', closeHamburgerMenu);
           <span class="mbsync-email">${userEmail || 'your account'}</span>
         </div>
         <div class="mbsync-info">Last sync: ${lastStr}${lastError ? '<br><span style="color:#f87171">⚠ ' + lastError + '</span>' : ''}</div>
+        <div class="mbsync-info" style="font-size:11px;line-height:1.4">
+          <strong>👨‍👩‍👧 Share with family:</strong><br>
+          Open Google Drive, find <strong>movebox-shared-data.json</strong>, right-click → Share → add their Gmail with Editor access. They'll see the same boxes when they sign in here.
+        </div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <button class="mbsync-btn primary" onclick="window.MBSync.syncNow()">⟳ Sync Now</button>
           <button class="mbsync-btn danger" onclick="window.MBSync.signOut()">Sign Out</button>
@@ -1135,6 +1140,11 @@ document.addEventListener('click', closeHamburgerMenu);
     if (contentType) headers['Content-Type'] = contentType;
     return fetch(url, { method, headers, body }).then(r => {
       if (r.status === 401){ silentRefresh(); throw new Error('Token expired'); }
+      if (r.status === 404){
+        driveFileId = null;
+        localStorage.removeItem('mbsync_fileId');
+        throw new Error('File not found — will recreate on next sync');
+      }
       if (r.status === 204) return null;
       return r.json().then(data => { if (!r.ok) throw new Error(data?.error?.message || 'HTTP ' + r.status); return data; });
     });
@@ -1156,12 +1166,26 @@ document.addEventListener('click', closeHamburgerMenu);
   function ensureDataFile(){
     if (driveFileId) return Promise.resolve(driveFileId);
     if (_persisted.fileId){ driveFileId = _persisted.fileId; return Promise.resolve(driveFileId); }
-    return ensureFolder().then(fid => {
-      const q = encodeURIComponent(`name='${DATA_FILE}' and '${fid}' in parents and trashed=false`);
-      return driveReq('GET', `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
-    }).then(data => {
-      if (data.files?.length){ driveFileId = data.files[0].id; _rawSet('mbsync_fileId', driveFileId); return driveFileId; }
-      return uploadFile(null, buildPayload()).then(f => { driveFileId = f.id; _rawSet('mbsync_fileId', driveFileId); return driveFileId; });
+
+    // Search for the data file across all accessible files (owned + shared with me)
+    const q = encodeURIComponent(`name='${DATA_FILE}' and trashed=false`);
+    const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,owners,shared)&includeItemsFromAllDrives=true&supportsAllDrives=true&corpora=allDrives`;
+
+    return driveReq('GET', searchUrl).then(data => {
+      if (data.files && data.files.length > 0){
+        // Found existing file (owned or shared) — use it
+        driveFileId = data.files[0].id;
+        _rawSet('mbsync_fileId', driveFileId);
+        log('Using existing shared/owned data file', driveFileId);
+        return driveFileId;
+      }
+      // No existing file anywhere — create a new one in this user's own folder
+      return ensureFolder().then(() => uploadFile(null, buildPayload())).then(f => {
+        driveFileId = f.id;
+        _rawSet('mbsync_fileId', driveFileId);
+        log('Created new data file (this user is owner)', driveFileId);
+        return driveFileId;
+      });
     });
   }
 
@@ -1196,13 +1220,15 @@ document.addEventListener('click', closeHamburgerMenu);
     const boundary = 'mbsync_' + Date.now();
     const meta = JSON.stringify({ name: DATA_FILE, mimeType: 'application/json', ...(folderId && !fileId ? { parents: [folderId] } : {}) });
     const body = [`--${boundary}`, 'Content-Type: application/json; charset=UTF-8', '', meta, `--${boundary}`, 'Content-Type: application/json', '', json, `--${boundary}--`].join('\r\n');
-    const url = fileId ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart` : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+    const url = fileId
+      ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&supportsAllDrives=true`
+      : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true';
     return driveReq(fileId ? 'PATCH' : 'POST', url, body, `multipart/related; boundary="${boundary}"`);
   }
 
   function pullFromDrive(){
     if (!tokenValid()) return Promise.resolve(0);
-    return ensureDataFile().then(fid => fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media`, { headers: { Authorization: 'Bearer ' + accessToken } }))
+    return ensureDataFile().then(fid => fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media&supportsAllDrives=true`, { headers: { Authorization: 'Bearer ' + accessToken } }))
       .then(r => { if (!r.ok) throw new Error('Fetch failed'); return r.json(); })
       .then(data => { const changed = applyPayload(data); _rawSet('mbsync_lastSync', new Date().toISOString()); return changed; });
   }
