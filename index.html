@@ -354,7 +354,9 @@ function getStatusLabel(status) {
 
 // ==================== CREATE NEW BOX ====================
 function showNewBoxModal() {
-  const roomOptions = defaultRooms.map(r => `<option value="${r}">${r}</option>`).join('');
+  const defaultRoomSet = new Set(defaultRooms);
+  const customRooms = Array.from(new Set(boxes.map(b => b.room))).filter(r => !defaultRoomSet.has(r)).sort();
+  const roomOptions = [...defaultRooms, ...customRooms].map(r => `<option value="${r}">${r}</option>`).join('');
   
   const modalHTML = `
     <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[200]" onclick="this.remove()">
