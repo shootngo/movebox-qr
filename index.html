@@ -1277,7 +1277,7 @@ document.addEventListener('click', closeHamburgerMenu);
 
   function pullFromDrive(){
     if (!tokenValid()) return Promise.resolve(0);
-    return ensureDataFile().then(fid => fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media&supportsAllDrives=true`, { headers: { Authorization: 'Bearer ' + accessToken } }))
+    return ensureDataFile().then(fid => fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media&supportsAllDrives=true&t=${Date.now()}`, { headers: { Authorization: 'Bearer ' + accessToken } }))
       .then(r => { if (!r.ok) throw new Error('Fetch failed'); return r.json(); })
       .then(data => { const changed = applyPayload(data); _rawSet('mbsync_lastSync', new Date().toISOString()); return changed; });
   }
@@ -1298,7 +1298,19 @@ document.addEventListener('click', closeHamburgerMenu);
 
   function setupAndPull(){
     return ensureFolder().then(() => ensureDataFile()).then(() => pullFromDrive())
-      .then(changed => { initialPullDone = true; if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); if (changed > 0) showUpdateToast(); showPill('signed-in', '✓ Synced', 2500); });
+      .then(changed => { initialPullDone = true; if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); if (changed > 0) showUpdateToast(); showPill('signed-in', '✓ Synced', 2500); })
+      .catch(err => {
+        logError('Initial pull failed', err);
+        // Set initialPullDone anyway so the 30s poll and pushes can still start
+        initialPullDone = true;
+        showPill('error', 'Sync error — will retry', 4000);
+        // Retry once after 15 seconds
+        setTimeout(() => {
+          if (isSignedIn) pullFromDrive()
+            .then(changed => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); if (changed > 0) showUpdateToast(); showPill('signed-in', '✓ Synced', 2500); })
+            .catch(e => logError('Retry pull failed', e));
+        }, 15000);
+      });
   }
 
   // ================== PUBLIC API ==================
@@ -1360,6 +1372,7 @@ document.addEventListener('click', closeHamburgerMenu);
       if (window.__reloadBoxes) window.__reloadBoxes();
       if (typeof renderDashboard === 'function') renderDashboard();
       if (typeof renderBoxesList === 'function') renderBoxesList();
+      if (typeof populateRoomFilter === 'function') populateRoomFilter();
       const modal = document.getElementById('box-modal');
       if (modal && !modal.classList.contains('hidden') && currentBoxId && typeof showBoxDetail === 'function') {
         showBoxDetail(currentBoxId);
