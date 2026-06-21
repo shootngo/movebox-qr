@@ -1298,7 +1298,7 @@ document.addEventListener('click', closeHamburgerMenu);
 
   function setupAndPull(){
     return ensureFolder().then(() => ensureDataFile()).then(() => pullFromDrive())
-      .then(() => { initialPullDone = true; if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); showPill('signed-in', '✓ Synced', 2500); });
+      .then(changed => { initialPullDone = true; if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); if (changed > 0) showUpdateToast(); showPill('signed-in', '✓ Synced', 2500); });
   }
 
   // ================== PUBLIC API ==================
