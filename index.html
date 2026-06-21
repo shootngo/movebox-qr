@@ -165,9 +165,11 @@
 
       <!-- Voice-powered item input -->
       <div class="flex gap-2 mb-3">
-        <input id="item-input" type="text" placeholder="Type or tap mic to speak..." 
+        <input id="item-input" type="text" placeholder="Type item, then tap +"
                class="flex-1 bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500"
-               onkeypress="if (event.key === 'Enter') addTypedItem()">
+               onkeydown="if (event.key === 'Enter') addTypedItem()">
+        <button onclick="addTypedItem()"
+                class="px-4 py-3 bg-emerald-700 hover:bg-emerald-600 rounded-2xl text-lg font-bold leading-none">+</button>
         <button onclick="startVoiceInput()" id="mic-btn"
                 class="mic-btn px-4 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-2xl flex items-center justify-center">
           <span class="text-xl">🎤</span>
@@ -577,6 +579,20 @@ function updateStatus(newStatus) {
 }
 
 function closeModal() {
+  // Auto-save any text left in the item input before closing
+  const itemInput = document.getElementById('item-input');
+  if (itemInput && currentBoxId) {
+    const text = itemInput.value.trim();
+    if (text) {
+      const box = boxes.find(b => b.id === currentBoxId);
+      if (box) {
+        if (!box.items) box.items = [];
+        box.items.push(text);
+        saveData();
+        itemInput.value = '';
+      }
+    }
+  }
   const modal = document.getElementById('box-modal');
   modal.classList.remove('flex');
   modal.classList.add('hidden');
