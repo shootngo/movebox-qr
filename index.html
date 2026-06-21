@@ -1369,14 +1369,26 @@ document.addEventListener('click', closeHamburgerMenu);
 
   // Pull fresh data when user returns to the tab
   window.addEventListener('focus', () => {
-    if (isSignedIn && initialPullDone) pullFromDrive().then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); });
+    if (isSignedIn && initialPullDone) pullFromDrive()
+      .then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); })
+      .catch(err => logError('Focus pull failed', err));
   });
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && isSignedIn && initialPullDone) {
-      pullFromDrive().then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); });
+      pullFromDrive()
+        .then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); })
+        .catch(err => logError('Visibility pull failed', err));
     }
   });
+
+  // Periodic fallback poll every 30s — catches updates when both devices
+  // have the app open simultaneously (focus/visibilitychange never fire in that case)
+  setInterval(() => {
+    if (isSignedIn && initialPullDone) pullFromDrive()
+      .then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); })
+      .catch(err => logError('Periodic pull failed', err));
+  }, 30000);
 
   window.addEventListener('beforeunload', () => {
     if (isSignedIn && initialPullDone && pushTimer) {
