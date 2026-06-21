@@ -561,6 +561,7 @@ function removeItem(index) {
 
 function saveNotes() {
   const box = boxes.find(b => b.id === currentBoxId);
+  if (!box) return;
   box.notes = document.getElementById('modal-notes').value;
   saveData();
 }
