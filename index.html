@@ -1225,6 +1225,16 @@ document.addEventListener('click', closeHamburgerMenu);
     });
   }
 
+  function showUpdateToast(){
+    const existing = document.getElementById('mbsync-update-toast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.id = 'mbsync-update-toast';
+    toast.style.cssText = 'position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:99999;background:#1f2937;border:2px solid #10b981;border-radius:14px;padding:12px 20px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,0.5);font-family:system-ui;max-width:90vw;';
+    toast.innerHTML = '<span style="color:#6ee7b7;font-size:15px;">📥 Boxes updated from another device</span><button onclick="this.parentElement.remove()" style="background:#10b981;color:#111;border:none;border-radius:8px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:13px;flex-shrink:0;">OK</button>';
+    document.body.appendChild(toast);
+  }
+
   function buildPayload(){
     const payload = { version: 1, device: /Mobile|Android/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop', syncedAt: new Date().toISOString(), keys: {} };
     SYNC_KEYS.forEach(k => {
@@ -1247,7 +1257,10 @@ document.addEventListener('click', closeHamburgerMenu);
         changed++;
       }
     });
-    if (changed > 0 && typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI();
+    if (changed > 0 && typeof window.refreshMoveBoxUI === 'function') {
+      window.refreshMoveBoxUI();
+      if (initialPullDone) showUpdateToast();
+    }
     return changed;
   }
 
