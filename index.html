@@ -654,7 +654,7 @@ function showBulkPrintModal() {
 
 function updateBulkPrintCounter() {
   const checked = document.querySelectorAll('.bulk-print-cb:checked').length;
-  const pages = Math.ceil(checked / 2);
+  const pages = Math.ceil(checked / 4);
   const counter = document.getElementById('bulk-print-counter');
   const btn = document.getElementById('bulk-print-go');
   if (counter) counter.textContent = `${checked} box${checked !== 1 ? 'es' : ''} selected = ${pages} page${pages !== 1 ? 's' : ''}`;
@@ -684,16 +684,16 @@ function printSelectedLabels(boxIds) {
   }
 
   const pagesHTML = [];
-  for (let i = 0; i < selectedBoxes.length; i += 2) {
-    const pair = selectedBoxes.slice(i, i + 2);
-    pagesHTML.push(`<div class="page">${pair.map((box, j) => labelHTML(box, i + j)).join('')}</div>`);
+  for (let i = 0; i < selectedBoxes.length; i += 4) {
+    const group = selectedBoxes.slice(i, i + 4);
+    pagesHTML.push(`<div class="page">${group.map((box, j) => labelHTML(box, i + j)).join('')}</div>`);
   }
 
   const qrScript = selectedBoxes.map((box, idx) => `
     new QRCode(document.getElementById('qr-${idx}'), {
       text: ${JSON.stringify(box.id)},
-      width: 260,
-      height: 260,
+      width: 160,
+      height: 160,
       colorDark: "#000000",
       colorLight: "#ffffff",
       correctLevel: QRCode.CorrectLevel.H
@@ -709,17 +709,17 @@ function printSelectedLabels(boxIds) {
     body { font-family: system-ui; margin: 0; padding: 0; }
     .page {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: 1fr 1fr;
       grid-template-rows: 1fr 1fr;
-      gap: 0.2in;
+      gap: 0.15in;
       width: 7.7in;
       height: 10.2in;
       page-break-after: always;
     }
     .page:last-child { page-break-after: auto; }
     .label {
-      border: 3px solid black;
-      padding: 0.3in;
+      border: 2px solid black;
+      padding: 0.15in;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -727,11 +727,11 @@ function printSelectedLabels(boxIds) {
       text-align: center;
       page-break-inside: avoid;
     }
-    .label .header { font-size: 16px; color: #666; letter-spacing: 2px; }
-    .label .room { font-size: 48px; font-weight: bold; margin: 12px 0; }
-    .label .id { font-size: 24px; font-family: monospace; margin-top: 12px; }
-    .label .notes { font-size: 14px; color: #444; margin-top: 8px; max-width: 6in; }
-    .label .qr { margin: 12px 0; }
+    .label .header { font-size: 11px; color: #666; letter-spacing: 1px; }
+    .label .room { font-size: 28px; font-weight: bold; margin: 6px 0; }
+    .label .id { font-size: 16px; font-family: monospace; margin-top: 6px; }
+    .label .notes { font-size: 11px; color: #444; margin-top: 5px; max-width: 3in; }
+    .label .qr { margin: 6px 0; }
   </style>
 </head>
 <body>
