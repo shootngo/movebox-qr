@@ -862,17 +862,34 @@ function startScanner() {
     { fps: 10, qrbox: { width: 280, height: 280 } },
     (decodedText) => {
       stopScanner();
-      const foundBox = boxes.find(b => b.id === decodedText);
-      if (foundBox) {
-        document.getElementById('scan-result').innerHTML = 
-          `<span class="text-emerald-400">✓ Found ${decodedText}</span>`;
-        setTimeout(() => {
-          showBoxDetail(decodedText);
-          switchTab(1);
-        }, 600);
+      const resultEl = document.getElementById('scan-result');
+      resultEl.innerHTML = `<span class="text-zinc-400">Fetching latest data...</span>`;
+
+      const showResult = () => {
+        const foundBox = boxes.find(b => b.id === decodedText);
+        if (foundBox) {
+          const items = foundBox.items || [];
+          const preview = items.length > 0
+            ? items.slice(0, 6).map(i => `<div class="text-sm text-zinc-200">• ${escapeHtml(i)}</div>`).join('')
+              + (items.length > 6 ? `<div class="text-xs text-zinc-500 mt-1">+${items.length - 6} more items</div>` : '')
+            : `<div class="text-sm text-zinc-500 italic">No items listed yet</div>`;
+          resultEl.innerHTML = `
+            <div class="text-left mt-3 bg-zinc-800 border border-zinc-600 rounded-2xl p-4">
+              <div class="font-mono text-emerald-400 text-sm font-bold mb-1">✓ ${escapeHtml(decodedText)}</div>
+              <div class="text-2xl font-semibold mb-3">${escapeHtml(foundBox.room)}</div>
+              ${preview}
+              <div class="text-xs text-zinc-500 mt-3">Opening box details...</div>
+            </div>`;
+          setTimeout(() => { showBoxDetail(decodedText); switchTab(1); }, 2000);
+        } else {
+          resultEl.innerHTML = `<span class="text-red-400">Box ${escapeHtml(decodedText)} not found — make sure you're signed into sync and try scanning again.</span>`;
+        }
+      };
+
+      if (window.MBSync && window.MBSync.isSignedIn()) {
+        window.MBSync.pull().then(showResult).catch(showResult);
       } else {
-        document.getElementById('scan-result').innerHTML = 
-          `<span class="text-red-400">Box ${decodedText} not found in this move.</span>`;
+        showResult();
       }
     },
     (errorMessage) => {}
@@ -1376,6 +1393,7 @@ document.addEventListener('click', closeHamburgerMenu);
       showPill('syncing', 'Syncing...');
       pullFromDrive().then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); }).finally(() => pushToDrive());
     },
+    pull(){ return pullFromDrive().then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); }).catch(() => {}); },
     openModal,
     isSignedIn: () => isSignedIn,
     getEmail: () => userEmail
