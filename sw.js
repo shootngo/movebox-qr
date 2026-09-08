@@ -1,4 +1,5 @@
 /* Stashr service worker — cache name must stay unique vs Nickey/Rosa */
+/* Icon revision: squirrel stashing cardboard boxes (not acorns). */
 const CACHE = 'stashr-v1';
 const SHELL = [
   './',
