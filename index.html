@@ -589,7 +589,7 @@ function renderDashboard() {
         <div class="font-semibold">${escapeHtml(area)}</div>
         <div class="text-xs text-muted">${s.boxes} box${s.boxes !== 1 ? 'es' : ''} · ${s.items} item${s.items !== 1 ? 's' : ''}${s.out ? ` · ${s.out} out` : ''}</div>
       </div>
-      <div class="text-3xl font-bold text-moss">${s.boxes}</div>
+      <div class="text-3xl font-bold text-moss">${s.boxes || s.items}</div>
     </div>`).join('');
   container.querySelectorAll('[data-area]').forEach(el => {
     el.addEventListener('click', () => filterByArea(el.dataset.area));

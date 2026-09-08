@@ -4,11 +4,13 @@ Household storage inventory for attics, outbuildings, and cabinets. Print a QR l
 
 This is a personal, single-household tool. It is not a move tracker, not part of Nestor, and it does not require a login.
 
-**Live:** https://shootngo.github.io/stashr/
+**Live (after repo rename to `stashr`):** https://shootngo.github.io/stashr/
+
+Until the GitHub repo is renamed from `movebox-qr` → `stashr`, Pages stays at https://shootngo.github.io/movebox-qr/. The PWA `start_url`/`scope` are relative (`./`), so Add to Home Screen works on either path. App `id` is `/stashr/` so it will not collide with Nickey or Rosa.
 
 ## Offline / Add to Home Screen (Android)
 
-1. Open https://shootngo.github.io/stashr/ in Chrome.
+1. Open the Pages URL in Chrome (https://shootngo.github.io/stashr/ after rename).
 2. Menu → **Add to Home screen** / **Install app**.
 3. Stashr uses its own name, icon, theme colors, and service-worker cache (`stashr-v1`), so it will not collide with Nickey or Rosa.
 4. After the first online visit, scan, search, and the app shell work offline. Inventory lives in `localStorage`; box photos live in IndexedDB.

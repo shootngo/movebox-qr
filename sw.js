@@ -37,8 +37,25 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  const isHTML = req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('.html');
 
   event.respondWith((async () => {
+    if (isHTML) {
+      try {
+        const fresh = await fetch(req);
+        if (fresh && fresh.ok) {
+          const cache = await caches.open(CACHE);
+          cache.put(req, fresh.clone());
+        }
+        return fresh;
+      } catch (err) {
+        return (await caches.match(req, { ignoreSearch: true }))
+          || (await caches.match('./index.html'))
+          || Promise.reject(err);
+      }
+    }
+
     const cached = await caches.match(req, { ignoreSearch: true });
     if (cached) return cached;
     try {
@@ -49,10 +66,6 @@ self.addEventListener('fetch', (event) => {
       }
       return fresh;
     } catch (err) {
-      if (req.mode === 'navigate') {
-        const shell = await caches.match('./index.html');
-        if (shell) return shell;
-      }
       throw err;
     }
   })());
