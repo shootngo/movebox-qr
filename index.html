@@ -2,1476 +2,1714 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MoveBox QR • Packing Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Stashr • Household Storage</title>
+<meta name="description" content="Permanent household storage inventory. Print QR labels, scan a box, search an item, get the exact location.">
+<meta name="theme-color" content="#4A2A12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stashr">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          tan: { DEFAULT: '#F3E4C8', dark: '#E6D0A8' },
+          cream: '#FFF8F0',
+          bark: { DEFAULT: '#7A4E2D', dark: '#5C3A22' },
+          acorn: { DEFAULT: '#5C3317', dark: '#4A2A12', deep: '#3A1F0C' },
+          moss: { DEFAULT: '#5E7A3A', bright: '#6B8F44', pale: '#E7EED8' },
+          muted: '#6B5344',
+          ink: '#2A1810',
+          line: '#E2CBA8'
+        }
+      }
+    }
+  };
+</script>
+<script src="vendor/qrcode.min.js"></script>
+<script src="vendor/html5-qrcode.min.js"></script>
 <style>
-  body { font-family: system-ui, -apple-system, sans-serif; }
-  .box-card { transition: all 0.2s ease; }
-  .box-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); }
-  .modal { animation: fadeInScale 0.2s ease forwards; }
-  @keyframes fadeInScale { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+  :root {
+    --tan: #F3E4C8;
+    --cream: #FFF8F0;
+    --bark: #7A4E2D;
+    --acorn: #5C3317;
+    --acorn-deep: #4A2A12;
+    --moss: #5E7A3A;
+    --ink: #2A1810;
+    --muted: #6B5344;
+    --line: #E2CBA8;
+  }
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--tan); color: var(--ink); }
+  .box-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+  .box-card:hover { transform: translateY(-2px); box-shadow: 0 10px 18px -6px rgb(74 42 18 / 0.25); }
+  .modal-panel { animation: fadeInScale 0.2s ease forwards; }
+  @keyframes fadeInScale { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
   .qr-container { background: white; padding: 16px; border-radius: 12px; }
-  .status-packed { background-color: #dbeafe; color: #1e40af; }
-  .status-ontruck { background-color: #fef3c7; color: #92400e; }
-  .status-arrived { background-color: #d1fae5; color: #065f46; }
-  .status-unpacked { background-color: #e0e7ff; color: #3730a3; }
-  .mic-btn { transition: all 0.1s ease; }
-  .mic-btn.listening { background-color: #ef4444; color: white; animation: pulse 1.5s infinite; }
+  .mic-btn.listening { background-color: #b91c1c !important; color: white; animation: pulse 1.5s infinite; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+  .tab-btn.active { border-bottom: 3px solid #5E7A3A; color: #5E7A3A; font-weight: 600; }
+  input, select, textarea { color: var(--ink); }
+  .thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 12px; background: #efe0c4; }
+  .thumb-lg { width: 100%; max-height: 220px; object-fit: cover; border-radius: 16px; background: #efe0c4; }
+  @media print { .no-print { display: none !important; } }
 </style>
 </head>
-<body class="bg-zinc-950 text-zinc-200">
-<div class="max-w-4xl mx-auto">
+<body class="bg-tan text-acorn-deep">
+<div class="max-w-4xl mx-auto min-h-screen pb-24">
   <!-- Header -->
-  <div class="bg-zinc-900 border-b border-zinc-800 px-6 py-5 flex items-center justify-between sticky top-0 z-50">
-    <div>
-      <h1 class="text-3xl font-bold tracking-tight">MoveBox QR</h1>
-      <p class="text-zinc-400 text-sm">Debbie Lane Move • Know every box</p>
+  <div class="bg-acorn-dark text-cream border-b border-acorn-deep px-5 py-4 flex items-center justify-between sticky top-0 z-50">
+    <div class="flex items-center gap-3 min-w-0">
+      <img src="icon-192.png" alt="Stashr" class="w-11 h-11 rounded-xl shadow">
+      <div class="min-w-0">
+        <h1 class="text-2xl font-bold tracking-tight leading-none">Stashr</h1>
+        <p class="text-tan text-xs mt-1 truncate">Household storage inventory</p>
+      </div>
     </div>
-    <div class="flex items-center gap-3 relative">
+    <div class="flex items-center gap-2 relative">
       <button onclick="toggleHamburgerMenu(event)" id="hamburger-btn"
-              class="p-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-xl leading-none">☰</button>
+              class="p-2.5 bg-acorn hover:bg-acorn-deep rounded-xl text-xl leading-none" aria-label="Menu">☰</button>
       <div id="hamburger-menu" onclick="event.stopPropagation()"
-           class="hidden absolute right-0 top-full mt-2 w-52 bg-zinc-800 border border-zinc-700 rounded-2xl shadow-xl z-[300] overflow-hidden">
+           class="hidden absolute right-0 top-full mt-2 w-56 bg-cream text-acorn-deep border border-tan-dark rounded-2xl shadow-xl z-[300] overflow-hidden">
         <button onclick="showNewBoxModal(); closeHamburgerMenu()"
-                class="w-full text-left px-5 py-3.5 hover:bg-zinc-700 font-semibold text-emerald-400">+ New Box</button>
-        <div class="border-t border-zinc-700"></div>
+                class="w-full text-left px-5 py-3.5 hover:bg-tan font-semibold text-moss">+ New Box</button>
+        <button onclick="showNewItemModal(); closeHamburgerMenu()"
+                class="w-full text-left px-5 py-3.5 hover:bg-tan font-semibold">+ New Item</button>
+        <div class="border-t border-line"></div>
         <button onclick="showBulkPrintModal(); closeHamburgerMenu()"
-                class="w-full text-left px-5 py-3.5 hover:bg-zinc-700 text-sm font-semibold">🖨️ Bulk Print Labels</button>
-        <div class="border-t border-zinc-700"></div>
+                class="w-full text-left px-5 py-3.5 hover:bg-tan text-sm font-semibold">🖨️ Bulk Print Labels</button>
+        <button onclick="showLocationsModal(); closeHamburgerMenu()"
+                class="w-full text-left px-5 py-3.5 hover:bg-tan text-sm">Manage Locations</button>
+        <div class="border-t border-line"></div>
         <button onclick="exportData(); closeHamburgerMenu()"
-                class="w-full text-left px-5 py-3.5 hover:bg-zinc-700 text-sm">Export Data</button>
-        <div class="border-t border-zinc-700"></div>
-        <button onclick="window.MBSync && window.MBSync.openModal(); closeHamburgerMenu()"
-                class="w-full text-left px-5 py-3.5 hover:bg-zinc-700 text-sm">☁️ Cloud Sync</button>
+                class="w-full text-left px-5 py-3.5 hover:bg-tan text-sm">Export JSON</button>
+        <button onclick="document.getElementById('import-file').click(); closeHamburgerMenu()"
+                class="w-full text-left px-5 py-3.5 hover:bg-tan text-sm">Import JSON</button>
       </div>
     </div>
   </div>
+  <input id="import-file" type="file" accept="application/json" class="hidden" onchange="importData(event)">
 
   <!-- Tabs -->
-  <div class="flex border-b border-zinc-800 bg-zinc-900 px-2">
-    <button onclick="switchTab(0)" id="tab-0"
-            class="tab-btn flex-1 py-4 font-medium border-b-2 border-emerald-500 text-emerald-400">Dashboard</button>
-    <button onclick="switchTab(1)" id="tab-1"
-            class="tab-btn flex-1 py-4 font-medium text-zinc-400 hover:text-zinc-200">My Boxes</button>
-    <button onclick="switchTab(2)" id="tab-2"
-            class="tab-btn flex-1 py-4 font-medium text-zinc-400 hover:text-zinc-200">Scan QR</button>
+  <div class="flex border-b border-tan-dark bg-cream px-1 sticky top-[76px] z-40">
+    <button onclick="switchTab(0)" id="tab-0" class="tab-btn active flex-1 py-3.5 text-sm font-medium">Home</button>
+    <button onclick="switchTab(1)" id="tab-1" class="tab-btn flex-1 py-3.5 text-sm font-medium text-muted">Boxes</button>
+    <button onclick="switchTab(2)" id="tab-2" class="tab-btn flex-1 py-3.5 text-sm font-medium text-muted">Find</button>
+    <button onclick="switchTab(3)" id="tab-3" class="tab-btn flex-1 py-3.5 text-sm font-medium text-muted">Scan</button>
   </div>
 
-  <!-- DASHBOARD -->
-  <div id="view-0" class="p-6">
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-      <div class="bg-zinc-900 rounded-3xl p-5">
-        <div class="text-zinc-400 text-sm">Total Boxes</div>
-        <div id="stat-total" class="text-5xl font-bold mt-1">0</div>
-      </div>
-      <div class="bg-zinc-900 rounded-3xl p-5">
-        <div class="text-zinc-400 text-sm">Packed</div>
-        <div id="stat-packed" class="text-5xl font-bold mt-1 text-blue-400">0</div>
-      </div>
-      <div class="bg-zinc-900 rounded-3xl p-5">
-        <div class="text-zinc-400 text-sm">On Truck / Arrived</div>
-        <div id="stat-progress" class="text-5xl font-bold mt-1 text-amber-400">0</div>
-      </div>
-      <div class="bg-zinc-900 rounded-3xl p-5">
-        <div class="text-zinc-400 text-sm">Unpacked</div>
-        <div id="stat-unpacked" class="text-5xl font-bold mt-1 text-violet-400">0</div>
-      </div>
-    </div>
-
-    <h2 class="font-semibold text-xl mb-4 px-1">Boxes by Room</h2>
-    <div id="room-stats" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
-  </div>
-
-  <!-- MY BOXES -->
-  <div id="view-1" class="p-6 hidden">
-    <div class="flex gap-3 mb-4">
-      <input id="search-input" type="text" placeholder="Search boxes or items..." 
-             class="flex-1 bg-zinc-900 border border-zinc-700 rounded-2xl px-5 py-3 text-lg focus:outline-none focus:border-emerald-500"
-             oninput="renderBoxesList()">
-      <select id="room-filter" onchange="renderBoxesList()"
-              class="bg-zinc-900 border border-zinc-700 rounded-2xl px-4 text-sm">
-        <option value="">All Rooms</option>
-      </select>
-      <button onclick="showBulkPrintModal()"
-              class="bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 rounded-2xl px-4 text-sm whitespace-nowrap">
-        🖨️ Bulk Print
+  <!-- HOME / DASHBOARD -->
+  <div id="view-0" class="p-5">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
+      <button onclick="switchTab(1)" class="bg-cream rounded-3xl p-5 text-left shadow-sm border border-tan-dark">
+        <div class="text-muted text-sm">Boxes</div>
+        <div id="stat-boxes" class="text-4xl font-bold mt-1">0</div>
       </button>
+      <button onclick="switchTab(2)" class="bg-cream rounded-3xl p-5 text-left shadow-sm border border-tan-dark">
+        <div class="text-muted text-sm">Items</div>
+        <div id="stat-items" class="text-4xl font-bold mt-1">0</div>
+      </button>
+      <button onclick="filterCheckedOut()" class="bg-cream rounded-3xl p-5 text-left shadow-sm border border-tan-dark">
+        <div class="text-muted text-sm">Checked out</div>
+        <div id="stat-out" class="text-4xl font-bold mt-1 text-bark">0</div>
+      </button>
+      <div class="bg-cream rounded-3xl p-5 shadow-sm border border-tan-dark">
+        <div class="text-muted text-sm">Locations</div>
+        <div id="stat-locs" class="text-4xl font-bold mt-1 text-moss">0</div>
+      </div>
     </div>
 
+    <div id="checked-out-panel" class="hidden mb-7">
+      <h2 class="font-semibold text-lg mb-3 px-1">Currently checked out</h2>
+      <div id="checked-out-list" class="space-y-2"></div>
+    </div>
+
+    <h2 class="font-semibold text-lg mb-3 px-1">By location</h2>
+    <div id="location-stats" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+  </div>
+
+  <!-- BOXES -->
+  <div id="view-1" class="p-5 hidden">
+    <div class="flex gap-2 mb-4">
+      <input id="box-search" type="search" placeholder="Search boxes or contents…"
+             class="flex-1 bg-cream border border-tan-dark rounded-2xl px-4 py-3 text-base focus:outline-none focus:border-moss"
+             oninput="renderBoxesList()">
+      <select id="area-filter" onchange="onAreaFilterChange()"
+              class="bg-cream border border-tan-dark rounded-2xl px-3 text-sm max-w-[42%]">
+        <option value="">All areas</option>
+      </select>
+    </div>
+    <div class="flex gap-2 mb-4">
+      <select id="cabinet-filter" onchange="renderBoxesList()"
+              class="flex-1 bg-cream border border-tan-dark rounded-2xl px-3 py-2 text-sm">
+        <option value="">All cabinets</option>
+      </select>
+      <button onclick="showNewBoxModal()"
+              class="bg-acorn hover:bg-acorn-dark text-cream font-semibold rounded-2xl px-4 py-2 text-sm whitespace-nowrap">+ Box</button>
+    </div>
     <div id="boxes-list" class="space-y-3"></div>
   </div>
 
-  <!-- SCAN QR -->
-  <div id="view-2" class="p-6 hidden text-center">
+  <!-- FIND -->
+  <div id="view-2" class="p-5 hidden">
+    <div class="max-w-lg mx-auto">
+      <h2 class="text-xl font-semibold mb-1">Find an item</h2>
+      <p class="text-muted text-sm mb-4">Search or ask out loud — “Where’s my Skil saw?”</p>
+      <div class="flex gap-2 mb-3">
+        <input id="find-input" type="search" placeholder="Skil saw, Christmas lights…"
+               class="flex-1 bg-cream border border-tan-dark rounded-2xl px-4 py-3 text-lg focus:outline-none focus:border-moss"
+               oninput="runFind()"
+               onkeydown="if (event.key==='Enter') runFind(true)">
+        <button onclick="startVoiceSearch()" id="find-mic"
+                class="mic-btn px-4 py-3 bg-acorn hover:bg-acorn-dark text-cream rounded-2xl text-xl" title="Voice search">🎤</button>
+      </div>
+      <label class="flex items-center gap-2 text-sm text-muted mb-4 px-1">
+        <input id="find-out-only" type="checkbox" class="accent-moss" onchange="runFind()">
+        Checked out only
+      </label>
+      <div id="find-spoken" class="hidden mb-4 bg-moss-pale border border-moss/30 rounded-2xl px-4 py-3 text-sm"></div>
+      <div id="find-results" class="space-y-2"></div>
+    </div>
+  </div>
+
+  <!-- SCAN -->
+  <div id="view-3" class="p-5 hidden text-center">
     <div class="max-w-md mx-auto">
       <div class="mb-6">
-        <div class="mx-auto w-20 h-20 bg-zinc-800 rounded-3xl flex items-center justify-center mb-4">
-          <span class="text-5xl">📷</span>
-        </div>
-        <h2 class="text-2xl font-semibold mb-2">Scan Box QR Code</h2>
-        <p class="text-zinc-400">Point your camera at any box label to instantly see what’s inside and where it goes.</p>
+        <img src="icon-192.png" alt="" class="mx-auto w-20 h-20 rounded-3xl shadow mb-4">
+        <h2 class="text-2xl font-semibold mb-2">Scan a box label</h2>
+        <p class="text-muted">Point the camera at a Stashr QR code to open that box — works offline.</p>
       </div>
-
-      <button onclick="startScanner()" 
-              class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-3xl text-xl font-semibold shadow-xl mb-4">
+      <button onclick="startScanner()"
+              class="w-full py-4 bg-acorn hover:bg-acorn-dark text-cream rounded-3xl text-xl font-semibold shadow-xl mb-3">
         Start Camera Scan
       </button>
-      
-      <button onclick="stopScanner()" 
-              class="w-full py-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm">
+      <button onclick="stopScanner()"
+              class="w-full py-3 bg-cream hover:bg-tan-dark border border-tan-dark rounded-2xl text-sm">
         Stop Scanner
       </button>
-
-      <div id="qr-reader" class="mt-6 mx-auto max-w-[320px] rounded-3xl overflow-hidden border border-zinc-700"></div>
-      <div id="scan-result" class="mt-4 text-sm text-zinc-400"></div>
+      <div id="qr-reader" class="mt-6 mx-auto max-w-[320px] rounded-3xl overflow-hidden border border-tan-dark bg-black/5"></div>
+      <div id="scan-result" class="mt-4 text-sm text-muted"></div>
     </div>
   </div>
 </div>
 
 <!-- Box Detail Modal -->
-<div id="box-modal" onclick="if (event.target.id === 'box-modal') closeModal()" 
-     class="hidden fixed inset-0 bg-black/70 flex items-end md:items-center justify-center z-[100]">
-  <div onclick="event.stopImmediatePropagation()" 
-       class="bg-zinc-900 w-full md:w-[520px] md:rounded-3xl md:m-4 rounded-t-3xl p-6 max-h-[92vh] overflow-auto">
-    
+<div id="box-modal" onclick="if (event.target.id === 'box-modal') closeBoxModal()"
+     class="hidden fixed inset-0 bg-black/60 flex items-end md:items-center justify-center z-[100]">
+  <div onclick="event.stopImmediatePropagation()"
+       class="modal-panel bg-cream w-full md:w-[540px] md:rounded-3xl md:m-4 rounded-t-3xl p-5 max-h-[94vh] overflow-auto">
     <div class="flex justify-between items-start mb-4 gap-3">
-      <button onclick="closeModal()"
-              class="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm font-medium flex-shrink-0">
-        ← Back
-      </button>
-      <div class="flex-1 text-right">
-        <div id="modal-box-id" class="font-mono text-emerald-400 text-sm font-bold"></div>
-        <div id="modal-room" class="text-2xl font-semibold"></div>
+      <button onclick="closeBoxModal()"
+              class="flex items-center gap-2 px-4 py-2 bg-tan hover:bg-tan-dark rounded-2xl text-sm font-medium">← Back</button>
+      <div class="flex-1 text-right min-w-0">
+        <div id="modal-box-id" class="font-mono text-moss text-sm font-bold"></div>
+        <div id="modal-box-name" class="text-xl font-semibold truncate"></div>
+        <div id="modal-box-loc" class="text-sm text-muted truncate"></div>
       </div>
-      <button onclick="closeModal()" class="text-3xl leading-none text-zinc-500 hover:text-white flex-shrink-0">×</button>
+      <button onclick="closeBoxModal()" class="text-3xl leading-none text-muted hover:text-ink flex-shrink-0">×</button>
     </div>
 
-    <!-- Status -->
-    <div class="flex gap-2 mb-6" id="status-buttons"></div>
-
-    <!-- QR Code -->
-    <div class="qr-container mb-6 flex justify-center">
+    <div class="qr-container mb-4 flex justify-center border border-tan-dark">
       <div id="modal-qr"></div>
     </div>
 
-    <!-- Items with Voice Input -->
-    <div class="mb-6">
-      <div class="flex justify-between items-center mb-3">
+    <div class="mb-4">
+      <div class="flex justify-between items-center mb-2">
+        <div class="font-semibold">Photo</div>
+        <div class="flex gap-2">
+          <label class="text-sm px-3 py-1.5 bg-tan hover:bg-tan-dark rounded-2xl cursor-pointer">
+            Attach
+            <input id="photo-input" type="file" accept="image/*" capture="environment" class="hidden" onchange="onBoxPhoto(event)">
+          </label>
+          <button onclick="removeBoxPhoto()" class="text-sm px-3 py-1.5 text-red-800">Remove</button>
+        </div>
+      </div>
+      <img id="modal-photo" alt="Box contents" class="thumb-lg hidden">
+      <div id="modal-photo-empty" class="text-sm text-muted">No photo yet — useful for a quick glance in the attic.</div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-3 mb-4">
+      <div>
+        <label class="block text-sm text-muted mb-1">Name / label</label>
+        <input id="modal-name" class="w-full bg-white border border-tan-dark rounded-2xl px-4 py-3"
+               onblur="saveBoxFields()">
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-sm text-muted mb-1">Area</label>
+          <select id="modal-area" class="w-full bg-white border border-tan-dark rounded-2xl px-3 py-3"
+                  onchange="onModalAreaChange()"></select>
+        </div>
+        <div>
+          <label class="block text-sm text-muted mb-1">Cabinet / spot</label>
+          <select id="modal-cabinet" class="w-full bg-white border border-tan-dark rounded-2xl px-3 py-3"
+                  onchange="saveBoxFields()"></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <div class="flex justify-between items-center mb-2">
         <div class="font-semibold">Contents</div>
-        <button onclick="addItemToCurrentBox()" 
-                class="text-sm px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-2xl">+ Add Item</button>
+        <button onclick="addItemToCurrentBox()" class="text-sm px-3 py-1.5 bg-tan hover:bg-tan-dark rounded-2xl">+ Add</button>
       </div>
-
-      <!-- Voice-powered item input -->
       <div class="flex gap-2 mb-3">
-        <input id="item-input" type="text" placeholder="Type item, then tap +"
-               class="flex-1 bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500"
+        <input id="item-input" type="text" placeholder="Type an item, then +"
+               class="flex-1 bg-white border border-tan-dark rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-moss"
                onkeydown="if (event.key === 'Enter') addTypedItem()">
-        <button onclick="addTypedItem()"
-                class="px-4 py-3 bg-emerald-700 hover:bg-emerald-600 rounded-2xl text-lg font-bold leading-none">+</button>
+        <button onclick="addTypedItem()" class="px-4 py-3 bg-moss hover:bg-moss-bright text-white rounded-2xl text-lg font-bold leading-none">+</button>
         <button onclick="startVoiceInput()" id="mic-btn"
-                class="mic-btn px-4 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-2xl flex items-center justify-center">
-          <span class="text-xl">🎤</span>
-        </button>
+                class="mic-btn px-4 py-3 bg-tan hover:bg-tan-dark rounded-2xl" title="Speak an item">🎤</button>
       </div>
-
       <div id="modal-items" class="space-y-2 text-sm"></div>
     </div>
 
-    <!-- Notes -->
-    <div class="mb-6">
+    <div class="mb-4">
       <div class="font-semibold mb-2">Notes</div>
-      <textarea id="modal-notes" onblur="saveNotes()" 
-                class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl p-4 text-sm h-20 resize-y" 
-                placeholder="Fragile • Top load • Heavy • etc."></textarea>
+      <textarea id="modal-notes" onblur="saveBoxFields()"
+                class="w-full bg-white border border-tan-dark rounded-2xl p-4 text-sm h-20 resize-y"
+                placeholder="Fragile, heavy, seasonal…"></textarea>
     </div>
 
     <div class="mb-3">
       <button id="save-box-btn" onclick="saveCurrentBox()"
-              class="w-full py-4 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-bold text-lg rounded-2xl">
+              class="w-full py-4 bg-acorn hover:bg-acorn-dark text-cream font-bold text-lg rounded-2xl">
         Save
       </button>
     </div>
     <div class="flex gap-3">
       <button onclick="printLabel()"
-              class="flex-1 py-3 bg-white text-black font-semibold rounded-2xl">Print Label</button>
+              class="flex-1 py-3 bg-white border-2 border-acorn-deep text-acorn-deep font-semibold rounded-2xl">Print Label</button>
       <button onclick="deleteCurrentBox()"
-              class="flex-1 py-3 bg-red-900/70 hover:bg-red-900 text-red-300 rounded-2xl">Delete Box</button>
+              class="flex-1 py-3 bg-red-900/10 hover:bg-red-900/20 text-red-900 rounded-2xl">Delete Box</button>
     </div>
   </div>
 </div>
 
 <script>
-// ==================== DATA ====================
-let boxes = JSON.parse(localStorage.getItem('movingBoxes') || '[]');
-window.__getBoxes = () => boxes;
-window.__setBoxes = (newBoxes) => { boxes = newBoxes; };
-window.__reloadBoxes = () => { boxes = JSON.parse(localStorage.getItem('movingBoxes') || '[]'); };
+/* ========================================================================
+   Stashr — household storage inventory (offline-first, local only)
+   ======================================================================== */
+const STORAGE_KEY = 'stashr-data';
+const SEED_AREAS = {
+  'Craft Room Attic': ['A1','A2','A3','A4','A5','A6','B1','B2','B3','B4'],
+  'Playroom Attic': ['A1','A2','A3','A4','B1','B2','B3','B4'],
+  'Pole Barn Attic': [
+    'A1','A2','A3','A4','A5','A6','A7','A8','A9','A10',
+    'B1','B2','B3','B4','B5','B6','B7','B8','B9','B10',
+    'C1','C2','C3','C4','C5','C6','C7','C8','C9','C10'
+  ],
+  'Outbuildings': ['Barn loft', 'Lean-to', 'Garden shed', 'Pump house'],
+  'Garage': ['Overhead', 'Left cabinets', 'Right cabinets', 'Workbench'],
+  'Workshop': ['Pegboard', 'Bench cabinets', 'Floor'],
+  'Basement / Utility': [],
+  'Kitchen': ['Pantry', 'Upper cabinets', 'Lower cabinets'],
+  'Master Closet': [],
+  'Hall Closet': [],
+  'Linen Closet': []
+};
+
+let state = { boxes: [], items: [], areas: {} };
 let currentBoxId = null;
 let html5QrCode = null;
 let recognition = null;
+let objectUrls = [];
 
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function natSort(a, b) {
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+}
+function uid(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+function locLabel(area, cabinet) {
+  if (!area) return '';
+  return cabinet ? `${area} / ${cabinet}` : area;
+}
+function nowIso() { return new Date().toISOString(); }
+
+function mergeSeed(saved) {
+  const copySeed = () => {
+    const areas = {};
+    for (const [name, cabs] of Object.entries(SEED_AREAS)) areas[name] = [...cabs];
+    return areas;
+  };
+  if (!saved || !Object.keys(saved).length) return copySeed();
+  const areas = {};
+  for (const [name, cabs] of Object.entries(saved)) areas[name] = [...(cabs || [])];
+  return areas;
 }
 
-const defaultRooms = [
-  "Master Bedroom", "Emma's Room", "Son's Room", "Kitchen", 
-  "Living Room", "Dining Room", "Master Bathroom", "Kids Bathroom",
-  "Office", "Workshop / Man Cave", "Pole Barn / Storage", "Garage", 
-  "Laundry Room", "Misc / Other"
-];
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      state = { boxes: [], items: [], areas: mergeSeed(null) };
+      return;
+    }
+    const data = JSON.parse(raw);
+    state = {
+      boxes: data.boxes || [],
+      items: data.items || [],
+      areas: mergeSeed(data.areas)
+    };
+  } catch (e) {
+    console.warn('[Stashr] load failed', e);
+    state = { boxes: [], items: [], areas: mergeSeed(null) };
+  }
+}
 
-function saveData() {
-  localStorage.setItem('movingBoxes', JSON.stringify(boxes));
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    app: 'stashr',
+    version: 1,
+    boxes: state.boxes,
+    items: state.items,
+    areas: state.areas,
+    saved: nowIso()
+  }));
+}
+
+function rememberLocation(area, cabinet) {
+  if (!area) return;
+  if (!state.areas[area]) state.areas[area] = [];
+  if (cabinet && !state.areas[area].includes(cabinet)) {
+    state.areas[area].push(cabinet);
+    state.areas[area].sort(natSort);
+  }
 }
 
 function generateBoxId() {
-  const max = boxes.length > 0 ? Math.max(...boxes.map(b => parseInt(b.id.split('-')[1]))) : 0;
-  return `BOX-${String(max + 1).padStart(4, '0')}`;
+  const nums = state.boxes.map(b => {
+    const m = String(b.id).match(/(\d+)$/);
+    return m ? parseInt(m[1], 10) : 0;
+  });
+  const max = nums.length ? Math.max(...nums) : 0;
+  return `STASH-${String(max + 1).padStart(4, '0')}`;
 }
 
-// ==================== TABS ====================
-function switchTab(tab) {
-  document.querySelectorAll('[id^="view-"]').forEach(el => el.classList.add('hidden'));
-  document.getElementById(`view-${tab}`).classList.remove('hidden');
-
-  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
-    btn.classList.toggle('border-b-2', i === tab);
-    btn.classList.toggle('border-emerald-500', i === tab);
-    btn.classList.toggle('text-emerald-400', i === tab);
-    btn.classList.toggle('text-zinc-400', i !== tab);
-  });
-
-  if (tab === 1) renderBoxesList();
-  if (tab === 0) renderDashboard();
+function itemsInBox(boxId) {
+  return state.items.filter(i => i.boxId === boxId);
+}
+function boxById(id) {
+  return state.boxes.find(b => b.id === id);
+}
+function itemPlace(item) {
+  if (item.boxId) {
+    const box = boxById(item.boxId);
+    if (box) return `${box.id}, ${box.name || 'Untitled box'}, ${locLabel(box.area, box.cabinet)}`;
+  }
+  return locLabel(item.area, item.cabinet) || 'unassigned';
 }
 
-// ==================== DASHBOARD ====================
-function renderDashboard() {
-  const total = boxes.length;
-  const packed = boxes.filter(b => b.status === 'packed').length;
-  const progress = boxes.filter(b => ['ontruck', 'arrived'].includes(b.status)).length;
-  const unpacked = boxes.filter(b => b.status === 'unpacked').length;
-
-  document.getElementById('stat-total').textContent = total;
-  document.getElementById('stat-packed').textContent = packed;
-  document.getElementById('stat-progress').textContent = progress;
-  document.getElementById('stat-unpacked').textContent = unpacked;
-
-  const roomCounts = {};
-  boxes.forEach(box => {
-    roomCounts[box.room] = (roomCounts[box.room] || 0) + 1;
-  });
-
-  const container = document.getElementById('room-stats');
-  if (Object.keys(roomCounts).length === 0) {
-    container.innerHTML = `<div class="col-span-full text-center py-8 text-zinc-500">No boxes yet. Create your first box!</div>`;
-  } else {
-    container.innerHTML = Object.entries(roomCounts).sort((a,b) => b[1]-a[1]).map(([room, count]) => `
-        <div data-room="${room.replace(/"/g, '&quot;')}"
-             class="bg-zinc-900 hover:bg-zinc-800 cursor-pointer rounded-3xl p-5 flex justify-between items-center">
-          <div>
-            <div class="font-semibold">${escapeHtml(room)}</div>
-            <div class="text-xs text-zinc-500">${count} box${count > 1 ? 'es' : ''}</div>
-          </div>
-          <div class="text-4xl font-bold text-emerald-400">${count}</div>
-        </div>
-      `).join('');
-    container.querySelectorAll('[data-room]').forEach(el => {
-      el.addEventListener('click', () => filterByRoom(el.dataset.room));
+/* ---------- IndexedDB photos ---------- */
+const Photos = {
+  db: null,
+  open() {
+    if (this.db) return Promise.resolve(this.db);
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('stashr-photos', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('photos');
+      req.onsuccess = () => { this.db = req.result; resolve(this.db); };
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async put(id, blob) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('photos', 'readwrite');
+      tx.objectStore('photos').put(blob, id);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  },
+  async get(id) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('photos', 'readonly');
+      const r = tx.objectStore('photos').get(id);
+      r.onsuccess = () => res(r.result || null);
+      r.onerror = () => rej(r.error);
+    });
+  },
+  async delete(id) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('photos', 'readwrite');
+      tx.objectStore('photos').delete(id);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  },
+  async keys() {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('photos', 'readonly');
+      const r = tx.objectStore('photos').getAllKeys();
+      r.onsuccess = () => res(r.result || []);
+      r.onerror = () => rej(r.error);
     });
   }
+};
+
+function revokeUrls() {
+  objectUrls.forEach(u => URL.revokeObjectURL(u));
+  objectUrls = [];
+}
+async function setImgFromPhoto(img, boxId) {
+  if (!img || !boxId) return;
+  const blob = await Photos.get(boxId);
+  if (!blob) {
+    img.classList.add('hidden');
+    img.removeAttribute('src');
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  objectUrls.push(url);
+  img.src = url;
+  img.classList.remove('hidden');
+}
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const max = 1280;
+      let { width, height } = img;
+      if (width > max || height > max) {
+        const scale = max / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      canvas.toBlob(blob => {
+        URL.revokeObjectURL(url);
+        resolve(blob || file);
+      }, 'image/jpeg', 0.82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image')); };
+    img.src = url;
+  });
 }
 
-function filterByRoom(room) {
+/* ---------- Tabs ---------- */
+function switchTab(tab) {
+  stopScanner();
+  document.querySelectorAll('[id^="view-"]').forEach(el => el.classList.add('hidden'));
+  document.getElementById(`view-${tab}`).classList.remove('hidden');
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', i === tab);
+    btn.classList.toggle('text-muted', i !== tab);
+  });
+  if (tab === 0) renderDashboard();
+  if (tab === 1) renderBoxesList();
+  if (tab === 2) runFind();
+}
+
+function toggleHamburgerMenu(event) {
+  event.stopPropagation();
+  document.getElementById('hamburger-menu').classList.toggle('hidden');
+}
+function closeHamburgerMenu() {
+  const menu = document.getElementById('hamburger-menu');
+  if (menu) menu.classList.add('hidden');
+}
+document.addEventListener('click', closeHamburgerMenu);
+
+/* ---------- Dashboard ---------- */
+function renderDashboard() {
+  const boxes = state.boxes;
+  const items = state.items;
+  const out = items.filter(i => i.checkedOut);
+  const usedLocs = new Set(boxes.map(b => locLabel(b.area, b.cabinet)).filter(Boolean));
+  items.forEach(i => { if (!i.boxId && locLabel(i.area, i.cabinet)) usedLocs.add(locLabel(i.area, i.cabinet)); });
+
+  document.getElementById('stat-boxes').textContent = boxes.length;
+  document.getElementById('stat-items').textContent = items.length;
+  document.getElementById('stat-out').textContent = out.length;
+  document.getElementById('stat-locs').textContent = usedLocs.size;
+
+  const outPanel = document.getElementById('checked-out-panel');
+  const outList = document.getElementById('checked-out-list');
+  if (out.length) {
+    outPanel.classList.remove('hidden');
+    outList.innerHTML = out.map(item => `
+      <button onclick='openItem(${JSON.stringify(item.id)})'
+              class="w-full text-left bg-cream border border-tan-dark rounded-2xl px-4 py-3 hover:bg-tan">
+        <div class="font-semibold">${escapeHtml(item.name)}</div>
+        <div class="text-xs text-muted mt-0.5">Usually in ${escapeHtml(itemPlace(item))}</div>
+      </button>`).join('');
+  } else {
+    outPanel.classList.add('hidden');
+    outList.innerHTML = '';
+  }
+
+  const byArea = {};
+  boxes.forEach(b => {
+    const area = b.area || 'Unassigned';
+    if (!byArea[area]) byArea[area] = { boxes: 0, items: 0, out: 0 };
+    byArea[area].boxes += 1;
+    const its = itemsInBox(b.id);
+    byArea[area].items += its.length;
+    byArea[area].out += its.filter(i => i.checkedOut).length;
+  });
+  items.filter(i => !i.boxId).forEach(i => {
+    const area = i.area || 'Unassigned';
+    if (!byArea[area]) byArea[area] = { boxes: 0, items: 0, out: 0 };
+    byArea[area].items += 1;
+    if (i.checkedOut) byArea[area].out += 1;
+  });
+
+  const container = document.getElementById('location-stats');
+  const entries = Object.entries(byArea).sort((a, b) => b[1].boxes - a[1].boxes || a[0].localeCompare(b[0]));
+  if (entries.length === 0) {
+    container.innerHTML = `<div class="col-span-full text-center py-10 text-muted bg-cream rounded-3xl border border-dashed border-tan-dark">
+      Nothing stashed yet.<br>
+      <button onclick="showNewBoxModal()" class="mt-4 px-5 py-2 bg-acorn text-cream rounded-2xl font-semibold">Add your first box</button>
+    </div>`;
+    return;
+  }
+  container.innerHTML = entries.map(([area, s]) => `
+    <div data-area="${escapeHtml(area)}"
+         class="bg-cream hover:bg-white cursor-pointer rounded-3xl p-5 flex justify-between items-center border border-tan-dark">
+      <div>
+        <div class="font-semibold">${escapeHtml(area)}</div>
+        <div class="text-xs text-muted">${s.boxes} box${s.boxes !== 1 ? 'es' : ''} · ${s.items} item${s.items !== 1 ? 's' : ''}${s.out ? ` · ${s.out} out` : ''}</div>
+      </div>
+      <div class="text-3xl font-bold text-moss">${s.boxes}</div>
+    </div>`).join('');
+  container.querySelectorAll('[data-area]').forEach(el => {
+    el.addEventListener('click', () => filterByArea(el.dataset.area));
+  });
+}
+
+function filterByArea(area) {
   switchTab(1);
-  document.getElementById('room-filter').value = room;
+  const filter = document.getElementById('area-filter');
+  filter.value = area === 'Unassigned' ? '' : area;
+  onAreaFilterChange();
+}
+function filterCheckedOut() {
+  switchTab(2);
+  document.getElementById('find-out-only').checked = true;
+  runFind();
+}
+
+/* ---------- Filters ---------- */
+function populateAreaFilter() {
+  const filter = document.getElementById('area-filter');
+  const current = filter.value;
+  const names = Object.keys(state.areas).sort(natSort);
+  filter.innerHTML = '<option value="">All areas</option>' +
+    names.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+  if ([...filter.options].some(o => o.value === current)) filter.value = current;
+  refreshCabinetFilter();
+}
+function refreshCabinetFilter() {
+  const area = document.getElementById('area-filter').value;
+  const cab = document.getElementById('cabinet-filter');
+  const current = cab.value;
+  const list = area && state.areas[area] ? [...state.areas[area]].sort(natSort) : [];
+  cab.innerHTML = '<option value="">All cabinets</option>' +
+    list.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if ([...cab.options].some(o => o.value === current)) cab.value = current;
+}
+function onAreaFilterChange() {
+  refreshCabinetFilter();
   renderBoxesList();
 }
 
-// ==================== BOXES LIST ====================
+/* ---------- Boxes list ---------- */
 function renderBoxesList() {
-  const search = document.getElementById('search-input').value.toLowerCase();
-  const roomFilter = document.getElementById('room-filter').value;
-
-  let filtered = boxes;
-  if (roomFilter) filtered = filtered.filter(b => b.room === roomFilter);
+  const search = (document.getElementById('box-search').value || '').toLowerCase().trim();
+  const area = document.getElementById('area-filter').value;
+  const cabinet = document.getElementById('cabinet-filter').value;
+  let filtered = state.boxes.slice();
+  if (area) filtered = filtered.filter(b => b.area === area);
+  if (cabinet) filtered = filtered.filter(b => b.cabinet === cabinet);
   if (search) {
-    filtered = filtered.filter(b => 
-      b.id.toLowerCase().includes(search) || 
-      b.room.toLowerCase().includes(search) ||
-      (b.items && b.items.join(' ').toLowerCase().includes(search))
-    );
+    filtered = filtered.filter(b => {
+      const items = itemsInBox(b.id).map(i => i.name).join(' ');
+      const hay = `${b.id} ${b.name || ''} ${b.notes || ''} ${b.area || ''} ${b.cabinet || ''} ${items}`.toLowerCase();
+      return hay.includes(search);
+    });
   }
+  filtered.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, undefined, { sensitivity: 'base' }));
 
   const container = document.getElementById('boxes-list');
-  
   if (filtered.length === 0) {
-    container.innerHTML = `<div class="text-center py-12 text-zinc-500">No boxes found.</div>`;
+    container.innerHTML = `<div class="text-center py-12 text-muted bg-cream rounded-3xl border border-dashed border-tan-dark">No boxes found.</div>`;
     return;
   }
-
   container.innerHTML = filtered.map(box => {
-    const itemCount = box.items ? box.items.length : 0;
+    const items = itemsInBox(box.id);
+    const out = items.filter(i => i.checkedOut).length;
+    const preview = items.slice(0, 4).map(i => escapeHtml(i.name)).join(' · ');
     return `
-      <div onclick="showBoxDetail('${box.id}')" 
-           class="box-card bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl p-5 cursor-pointer">
-        <div class="flex justify-between items-start">
-          <div>
-            <div class="font-mono text-emerald-400 text-sm">${box.id}</div>
-            <div class="text-2xl font-semibold">${escapeHtml(box.room)}</div>
+      <div onclick="showBoxDetail('${box.id}')"
+           class="box-card bg-cream hover:bg-white border border-tan-dark rounded-3xl p-4 cursor-pointer flex gap-3">
+        <img data-photo="${box.id}" alt="" class="thumb hidden flex-shrink-0">
+        <div class="flex-1 min-w-0">
+          <div class="flex justify-between gap-2">
+            <div class="font-mono text-moss text-xs font-bold">${escapeHtml(box.id)}</div>
+            ${out ? `<span class="text-[10px] uppercase tracking-wide bg-bark/10 text-bark px-2 py-0.5 rounded-full">${out} out</span>` : ''}
           </div>
-          <div class="text-right">
-            <div class="text-xs px-3 py-1 rounded-full ${getStatusClass(box.status)}">${getStatusLabel(box.status)}</div>
-            <div class="text-xs text-zinc-500 mt-1">${itemCount} item${itemCount !== 1 ? 's' : ''}</div>
-          </div>
+          <div class="text-lg font-semibold truncate">${escapeHtml(box.name || 'Untitled box')}</div>
+          <div class="text-sm text-muted truncate">${escapeHtml(locLabel(box.area, box.cabinet) || 'No location')}</div>
+          <div class="text-xs text-muted mt-1">${items.length} item${items.length !== 1 ? 's' : ''}${preview ? ' — ' + preview : ''}</div>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
+  container.querySelectorAll('img[data-photo]').forEach(img => setImgFromPhoto(img, img.dataset.photo));
 }
 
-function getStatusClass(status) {
-  if (status === 'packed') return 'status-packed';
-  if (status === 'ontruck') return 'status-ontruck';
-  if (status === 'arrived') return 'status-arrived';
-  if (status === 'unpacked') return 'status-unpacked';
-  return 'bg-zinc-700 text-zinc-300';
+/* ---------- Location pickers ---------- */
+function fillAreaSelect(select, selected, includeCustom = true) {
+  const names = Object.keys(state.areas).sort(natSort);
+  select.innerHTML = names.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('') +
+    (includeCustom ? '<option value="__custom__">+ New area…</option>' : '');
+  if (selected && [...select.options].some(o => o.value === selected)) select.value = selected;
+  else if (names.length) select.value = names[0];
+}
+function fillCabinetSelect(select, area, selected, includeNone = true) {
+  const cabs = (state.areas[area] || []).slice().sort(natSort);
+  select.innerHTML =
+    (includeNone ? '<option value="">None / open</option>' : '') +
+    cabs.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('') +
+    '<option value="__custom__">+ New cabinet…</option>';
+  if (selected && [...select.options].some(o => o.value === selected)) select.value = selected;
 }
 
-function getStatusLabel(status) {
-  if (status === 'packed') return 'Packed';
-  if (status === 'ontruck') return 'On Truck';
-  if (status === 'arrived') return 'Arrived';
-  if (status === 'unpacked') return 'Unpacked';
-  return 'Packed';
+function promptCustomArea(select) {
+  const name = prompt('New area name (e.g. Pole Barn loft)');
+  if (!name || !name.trim()) {
+    if (select.options.length > 1) select.selectedIndex = 0;
+    return null;
+  }
+  const area = name.trim();
+  rememberLocation(area, null);
+  saveState();
+  populateAreaFilter();
+  return area;
+}
+function promptCustomCabinet(area) {
+  const name = prompt('New cabinet / spot code (e.g. A4, D12, Left wall)');
+  if (!name || !name.trim()) return null;
+  const cab = name.trim();
+  rememberLocation(area, cab);
+  saveState();
+  return cab;
 }
 
-// ==================== CREATE NEW BOX ====================
+/* ---------- Create box ---------- */
 function showNewBoxModal() {
-  const defaultRoomSet = new Set(defaultRooms);
-  const customRooms = Array.from(new Set(boxes.map(b => b.room))).filter(r => !defaultRoomSet.has(r)).sort();
-  const roomOptions = [...defaultRooms, ...customRooms].map(r => `<option value="${r}">${r}</option>`).join('');
-  
-  const modalHTML = `
-    <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[200]" onclick="this.remove()">
-      <div onclick="event.stopImmediatePropagation()" class="bg-zinc-900 rounded-3xl p-6 w-full max-w-md mx-4">
-        <h3 class="text-2xl font-semibold mb-6">Create New Box</h3>
-        
-        <div class="mb-5">
-          <label class="block text-sm mb-2 text-zinc-400">Destination Room in New House</label>
-          <select id="new-room-select" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-lg">
-            ${roomOptions}
-            <option value="custom">+ Add Custom Room</option>
-          </select>
-        </div>
-
-        <div id="custom-room-div" class="hidden mb-5">
-          <label class="block text-sm mb-2 text-zinc-400">Custom Room Name</label>
-          <input id="custom-room-input" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3" placeholder="e.g. Craft Room">
-        </div>
-
+  const areaNames = Object.keys(state.areas).sort(natSort);
+  const areaOpts = areaNames.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+  const first = areaNames[0] || '';
+  const cabOpts = (state.areas[first] || []).slice().sort(natSort)
+    .map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  const html = `
+    <div id="new-box-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-[200]"
+         onclick="if(event.target.id==='new-box-modal') this.remove()">
+      <div onclick="event.stopImmediatePropagation()" class="modal-panel bg-cream rounded-3xl p-6 w-full max-w-md mx-4">
+        <h3 class="text-2xl font-semibold mb-5">New box</h3>
+        <label class="block text-sm text-muted mb-1">Name / label</label>
+        <input id="new-box-name" class="w-full bg-white border border-tan-dark rounded-2xl px-4 py-3 mb-4" placeholder="Christmas decorations">
+        <label class="block text-sm text-muted mb-1">Area</label>
+        <select id="new-box-area" class="w-full bg-white border border-tan-dark rounded-2xl px-4 py-3 mb-4">
+          ${areaOpts}
+          <option value="__custom__">+ New area…</option>
+        </select>
+        <label class="block text-sm text-muted mb-1">Cabinet / spot</label>
+        <select id="new-box-cabinet" class="w-full bg-white border border-tan-dark rounded-2xl px-4 py-3 mb-5">
+          <option value="">None / open</option>
+          ${cabOpts}
+          <option value="__custom__">+ New cabinet…</option>
+        </select>
         <div class="flex gap-3">
-          <button onclick="this.closest('.fixed').remove()" 
-                  class="flex-1 py-3 bg-zinc-800 rounded-2xl">Cancel</button>
-          <button onclick="createNewBox(this)" 
-                  class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-semibold">Create Box</button>
+          <button onclick="document.getElementById('new-box-modal').remove()" class="flex-1 py-3 bg-tan rounded-2xl">Cancel</button>
+          <button onclick="createNewBox()" class="flex-1 py-3 bg-acorn hover:bg-acorn-dark text-cream rounded-2xl font-semibold">Create</button>
         </div>
       </div>
-    </div>
-  `;
-  
-  document.body.insertAdjacentHTML('beforeend', modalHTML);
-  
-  setTimeout(() => {
-    const select = document.getElementById('new-room-select');
-    const customDiv = document.getElementById('custom-room-div');
-    select.onchange = () => {
-      customDiv.classList.toggle('hidden', select.value !== 'custom');
-    };
-  }, 100);
-}
-
-function createNewBox(btn) {
-  const select = document.getElementById('new-room-select');
-  let room = select.value;
-  
-  if (room === 'custom') {
-    room = document.getElementById('custom-room-input').value.trim();
-    if (!room) { alert("Please enter a room name"); return; }
-  }
-  
-  const newBox = {
-    id: generateBoxId(),
-    room: room,
-    items: [],
-    notes: "",
-    status: "packed",
-    created: new Date().toISOString()
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+  const areaSel = document.getElementById('new-box-area');
+  const cabSel = document.getElementById('new-box-cabinet');
+  areaSel.onchange = () => {
+    if (areaSel.value === '__custom__') {
+      const area = promptCustomArea(areaSel);
+      if (!area) return;
+      fillAreaSelect(areaSel, area);
+      fillCabinetSelect(cabSel, area, '');
+      return;
+    }
+    fillCabinetSelect(cabSel, areaSel.value, '');
   };
-  
-  boxes.unshift(newBox);
-  saveData();
-  btn.closest('.fixed').remove();
-  
-  showBoxDetail(newBox.id);
-  renderDashboard();
-  populateRoomFilter();
+  cabSel.onchange = () => {
+    if (cabSel.value === '__custom__') {
+      const cab = promptCustomCabinet(areaSel.value);
+      fillCabinetSelect(cabSel, areaSel.value, cab || '');
+    }
+  };
+  setTimeout(() => document.getElementById('new-box-name').focus(), 50);
 }
 
-// ==================== BOX DETAIL + VOICE INPUT ====================
+function createNewBox() {
+  const name = document.getElementById('new-box-name').value.trim();
+  if (!name) { alert('Please give this box a name.'); return; }
+  let area = document.getElementById('new-box-area').value;
+  let cabinet = document.getElementById('new-box-cabinet').value;
+  if (area === '__custom__') area = '';
+  if (cabinet === '__custom__') cabinet = '';
+  rememberLocation(area, cabinet);
+  const box = {
+    id: generateBoxId(),
+    name,
+    area,
+    cabinet,
+    notes: '',
+    created: nowIso(),
+    updated: nowIso()
+  };
+  state.boxes.unshift(box);
+  saveState();
+  document.getElementById('new-box-modal').remove();
+  populateAreaFilter();
+  showBoxDetail(box.id);
+  renderDashboard();
+}
+
+/* ---------- Box detail ---------- */
 function showBoxDetail(boxId) {
   currentBoxId = boxId;
-  const box = boxes.find(b => b.id === boxId);
+  const box = boxById(boxId);
   if (!box) return;
 
   document.getElementById('modal-box-id').textContent = box.id;
-  document.getElementById('modal-room').textContent = box.room;
+  document.getElementById('modal-box-name').textContent = box.name || 'Untitled box';
+  document.getElementById('modal-box-loc').textContent = locLabel(box.area, box.cabinet) || 'No location';
+  document.getElementById('modal-name').value = box.name || '';
   document.getElementById('modal-notes').value = box.notes || '';
 
-  const statusContainer = document.getElementById('status-buttons');
-  statusContainer.innerHTML = `
-    <button onclick="updateStatus('packed')" class="flex-1 py-2 text-xs rounded-2xl status-packed">Packed</button>
-    <button onclick="updateStatus('ontruck')" class="flex-1 py-2 text-xs rounded-2xl status-ontruck">On Truck</button>
-    <button onclick="updateStatus('arrived')" class="flex-1 py-2 text-xs rounded-2xl status-arrived">Arrived</button>
-    <button onclick="updateStatus('unpacked')" class="flex-1 py-2 text-xs rounded-2xl status-unpacked">Unpacked</button>
-  `;
+  const areaSel = document.getElementById('modal-area');
+  const cabSel = document.getElementById('modal-cabinet');
+  fillAreaSelect(areaSel, box.area);
+  fillCabinetSelect(cabSel, areaSel.value, box.cabinet);
 
   renderItemsList(box);
 
   const qrContainer = document.getElementById('modal-qr');
   qrContainer.innerHTML = '';
-  new QRCode(qrContainer, {
-    text: box.id,
-    width: 180,
-    height: 180,
-    colorDark: "#000000",
-    colorLight: "#ffffff",
-    correctLevel: QRCode.CorrectLevel.H
+  if (window.QRCode) {
+    new QRCode(qrContainer, {
+      text: box.id,
+      width: 180,
+      height: 180,
+      colorDark: '#000000',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.H
+    });
+  }
+
+  const photo = document.getElementById('modal-photo');
+  const empty = document.getElementById('modal-photo-empty');
+  Photos.get(box.id).then(blob => {
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      objectUrls.push(url);
+      photo.src = url;
+      photo.classList.remove('hidden');
+      empty.classList.add('hidden');
+    } else {
+      photo.classList.add('hidden');
+      empty.classList.remove('hidden');
+    }
   });
 
   document.getElementById('box-modal').classList.remove('hidden');
   document.getElementById('box-modal').classList.add('flex');
 }
 
+function onModalAreaChange() {
+  const areaSel = document.getElementById('modal-area');
+  const cabSel = document.getElementById('modal-cabinet');
+  if (areaSel.value === '__custom__') {
+    const area = promptCustomArea(areaSel);
+    if (area) {
+      fillAreaSelect(areaSel, area);
+      fillCabinetSelect(cabSel, area, '');
+    } else {
+      fillAreaSelect(areaSel, boxById(currentBoxId)?.area);
+    }
+  } else {
+    fillCabinetSelect(cabSel, areaSel.value, '');
+  }
+  saveBoxFields();
+}
+
+function saveBoxFields() {
+  const box = boxById(currentBoxId);
+  if (!box) return;
+  box.name = document.getElementById('modal-name').value.trim();
+  let area = document.getElementById('modal-area').value;
+  let cabinet = document.getElementById('modal-cabinet').value;
+  if (area === '__custom__') {
+    const created = promptCustomArea(document.getElementById('modal-area'));
+    if (created) {
+      area = created;
+      fillAreaSelect(document.getElementById('modal-area'), area);
+    } else return;
+  }
+  if (cabinet === '__custom__') {
+    const created = promptCustomCabinet(area);
+    cabinet = created || '';
+    fillCabinetSelect(document.getElementById('modal-cabinet'), area, cabinet);
+  }
+  box.area = area;
+  box.cabinet = cabinet;
+  box.notes = document.getElementById('modal-notes').value;
+  box.updated = nowIso();
+  rememberLocation(area, cabinet);
+  saveState();
+  document.getElementById('modal-box-name').textContent = box.name || 'Untitled box';
+  document.getElementById('modal-box-loc').textContent = locLabel(box.area, box.cabinet) || 'No location';
+  populateAreaFilter();
+}
+
 function renderItemsList(box) {
   const container = document.getElementById('modal-items');
-  if (!box.items || box.items.length === 0) {
-    container.innerHTML = `<div class="text-zinc-500 text-sm py-2">No items added yet. Tap the mic to speak.</div>`;
+  const items = itemsInBox(box.id);
+  if (items.length === 0) {
+    container.innerHTML = `<div class="text-muted text-sm py-2">No items yet. Type, tap +, or use the mic.</div>`;
     return;
   }
-  
-  container.innerHTML = box.items.map((item, index) => `
-    <div class="flex items-center justify-between bg-zinc-800 rounded-2xl px-4 py-3 text-sm group">
-      <span>${escapeHtml(item)}</span>
-      <button onclick="removeItem(${index}); event.stopImmediatePropagation();" 
-              class="opacity-40 hover:opacity-100 text-red-400 px-2">×</button>
-    </div>
-  `).join('');
+  container.innerHTML = items.map(item => `
+    <div class="flex items-center gap-2 bg-white border border-tan-dark rounded-2xl px-3 py-2">
+      <label class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+        <input type="checkbox" class="accent-moss w-4 h-4" ${item.checkedOut ? 'checked' : ''}
+               onchange="toggleCheckout('${item.id}', this.checked)">
+        <span class="truncate ${item.checkedOut ? 'line-through text-muted' : ''}">${escapeHtml(item.name)}</span>
+      </label>
+      <span class="text-[10px] uppercase tracking-wide text-muted">${item.checkedOut ? 'out' : ''}</span>
+      <button onclick="removeItem('${item.id}')" class="text-red-800 px-2 opacity-60 hover:opacity-100">×</button>
+    </div>`).join('');
 }
 
 function addTypedItem() {
   const input = document.getElementById('item-input');
   const text = input.value.trim();
   if (!text) return;
-
-  const box = boxes.find(b => b.id === currentBoxId);
-  if (!box.items) box.items = [];
-  box.items.push(text);
-  saveData();
-  renderItemsList(box);
-  renderBoxesList();
+  addItemToBox(currentBoxId, text);
   input.value = '';
 }
 
 function addItemToCurrentBox() {
-  const item = prompt("What item are you adding to this box?");
+  const item = prompt('Item name');
   if (!item || !item.trim()) return;
+  addItemToBox(currentBoxId, item.trim());
+}
 
-  const box = boxes.find(b => b.id === currentBoxId);
-  if (!box.items) box.items = [];
-  box.items.push(item.trim());
-  saveData();
-  renderItemsList(box);
+function addItemToBox(boxId, name, extra = {}) {
+  const box = boxById(boxId);
+  const item = {
+    id: uid('ITM'),
+    name,
+    boxId: boxId || null,
+    area: extra.area || box?.area || '',
+    cabinet: extra.cabinet || box?.cabinet || '',
+    checkedOut: false,
+    created: nowIso()
+  };
+  state.items.push(item);
+  saveState();
+  if (box) renderItemsList(box);
   renderBoxesList();
 }
 
-// ==================== VOICE INPUT (Microphone) ====================
-function startVoiceInput() {
-  const micBtn = document.getElementById('mic-btn');
-  const input = document.getElementById('item-input');
-
-  if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
-    alert("Voice input is not supported on this browser. Try Chrome on Android or the latest Safari.");
-    return;
-  }
-
-  if (recognition) {
-    recognition.stop();
-    recognition = null;
-    micBtn.classList.remove('listening');
-    return;
-  }
-
-  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-  recognition = new SpeechRec();
-  recognition.continuous = false;
-  recognition.interimResults = false;
-  recognition.lang = 'en-US';
-
-  recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript.trim();
-    if (transcript) {
-      const box = boxes.find(b => b.id === currentBoxId);
-      if (!box.items) box.items = [];
-      box.items.push(transcript);
-      saveData();
-      renderItemsList(box);
-      renderBoxesList();
-    }
-    micBtn.classList.remove('listening');
-    recognition = null;
-  };
-
-  recognition.onerror = (event) => {
-    console.error('Speech recognition error:', event);
-    micBtn.classList.remove('listening');
-    recognition = null;
-    if (event.error === 'no-speech') {
-      alert("Didn't hear anything. Try again.");
-    } else {
-      alert("Voice input error. Please try again or type instead.");
-    }
-  };
-
-  recognition.onend = () => {
-    micBtn.classList.remove('listening');
-    recognition = null;
-  };
-
-  try {
-    recognition.start();
-    micBtn.classList.add('listening');
-  } catch (e) {
-    alert("Could not start voice input. Please try again.");
-    micBtn.classList.remove('listening');
-    recognition = null;
-  }
+function toggleCheckout(itemId, checked) {
+  const item = state.items.find(i => i.id === itemId);
+  if (!item) return;
+  item.checkedOut = !!checked;
+  saveState();
+  if (currentBoxId) renderItemsList(boxById(currentBoxId));
+  renderDashboard();
 }
 
-function removeItem(index) {
-  const box = boxes.find(b => b.id === currentBoxId);
-  box.items.splice(index, 1);
-  saveData();
-  renderItemsList(box);
+function removeItem(itemId) {
+  state.items = state.items.filter(i => i.id !== itemId);
+  saveState();
+  if (currentBoxId) renderItemsList(boxById(currentBoxId));
   renderBoxesList();
-}
-
-function saveNotes() {
-  const box = boxes.find(b => b.id === currentBoxId);
-  if (!box) return;
-  box.notes = document.getElementById('modal-notes').value;
-  saveData();
 }
 
 function saveCurrentBox() {
-  if (!currentBoxId) return;
-  const box = boxes.find(b => b.id === currentBoxId);
-  if (!box) return;
-
-  // Flush any unsaved notes
-  const notesEl = document.getElementById('modal-notes');
-  if (notesEl) box.notes = notesEl.value;
-
-  // Flush any pending item text
+  saveBoxFields();
   const itemInput = document.getElementById('item-input');
   if (itemInput && itemInput.value.trim()) {
-    if (!box.items) box.items = [];
-    box.items.push(itemInput.value.trim());
+    addItemToBox(currentBoxId, itemInput.value.trim());
     itemInput.value = '';
-    renderItemsList(box);
-    renderBoxesList();
   }
-
-  saveData();
-
   const btn = document.getElementById('save-box-btn');
   if (btn) {
-    btn.textContent = '✓ Saved!';
-    btn.style.background = '#10b981';
-    setTimeout(() => {
-      btn.textContent = 'Save';
-      btn.style.background = '';
-    }, 2000);
+    btn.textContent = '✓ Saved';
+    btn.style.background = '#5E7A3A';
+    setTimeout(() => { btn.textContent = 'Save'; btn.style.background = ''; }, 1600);
   }
 }
 
-function updateStatus(newStatus) {
-  const box = boxes.find(b => b.id === currentBoxId);
-  box.status = newStatus;
-  saveData();
-  console.log('[MoveBox] Status changed to', newStatus, 'for', currentBoxId, '— sync push should fire within 5 seconds');
-  renderBoxesList();
-  renderDashboard();
+async function onBoxPhoto(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (!file || !currentBoxId) return;
+  try {
+    const blob = await compressImage(file);
+    await Photos.put(currentBoxId, blob);
+    const box = boxById(currentBoxId);
+    if (box) { box.updated = nowIso(); saveState(); }
+    showBoxDetail(currentBoxId);
+    renderBoxesList();
+  } catch (e) {
+    alert('Could not attach that photo.');
+  }
+}
+async function removeBoxPhoto() {
+  if (!currentBoxId) return;
+  await Photos.delete(currentBoxId);
   showBoxDetail(currentBoxId);
+  renderBoxesList();
 }
 
-function closeModal() {
-  // Auto-save any text left in the item input before closing
+function closeBoxModal() {
   const itemInput = document.getElementById('item-input');
-  if (itemInput && currentBoxId) {
-    const text = itemInput.value.trim();
-    if (text) {
-      const box = boxes.find(b => b.id === currentBoxId);
-      if (box) {
-        if (!box.items) box.items = [];
-        box.items.push(text);
-        saveData();
-        itemInput.value = '';
-      }
-    }
+  if (itemInput && currentBoxId && itemInput.value.trim()) {
+    addItemToBox(currentBoxId, itemInput.value.trim());
+    itemInput.value = '';
   }
-  const modal = document.getElementById('box-modal');
-  modal.classList.remove('flex');
-  modal.classList.add('hidden');
+  saveBoxFields();
+  document.getElementById('box-modal').classList.add('hidden');
+  document.getElementById('box-modal').classList.remove('flex');
   currentBoxId = null;
   renderBoxesList();
   renderDashboard();
 }
 
 function deleteCurrentBox() {
-  if (!confirm("Delete this box permanently?")) return;
-  boxes = boxes.filter(b => b.id !== currentBoxId);
-  saveData();
-  console.log('[MoveBox] Box deleted:', currentBoxId, '— sync push should fire within 5 seconds');
+  if (!confirm('Delete this box and its item list? Photos will also be removed.')) return;
+  const id = currentBoxId;
+  state.boxes = state.boxes.filter(b => b.id !== id);
+  state.items = state.items.filter(i => i.boxId !== id);
+  Photos.delete(id).catch(() => {});
+  saveState();
   currentBoxId = null;
-  const modal = document.getElementById('box-modal');
-  modal.classList.remove('flex');
-  modal.classList.add('hidden');
-  switchTab(0);
+  document.getElementById('box-modal').classList.add('hidden');
+  document.getElementById('box-modal').classList.remove('flex');
+  populateAreaFilter();
   renderDashboard();
   renderBoxesList();
 }
 
-// ==================== BULK PRINT ====================
-function showBulkPrintModal() {
-  const activeRoom = document.getElementById('room-filter').value;
-  const candidates = activeRoom ? boxes.filter(b => b.room === activeRoom) : boxes;
-
-  if (candidates.length === 0) {
-    alert('No boxes to print.');
-    return;
-  }
-
-  const listHTML = candidates.map(box => `
-    <label class="flex items-center gap-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-4 py-3 cursor-pointer">
-      <input type="checkbox" class="bulk-print-cb w-4 h-4 accent-emerald-500" value="${box.id}" onchange="updateBulkPrintCounter()">
-      <span class="font-mono text-emerald-400 text-sm">${box.id}</span>
-      <span class="text-zinc-200">${escapeHtml(box.room)}</span>
-    </label>
-  `).join('');
-
-  const modalHTML = `
-    <div id="bulk-print-modal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-[200]"
-         onclick="if(event.target.id==='bulk-print-modal') this.remove()">
-      <div onclick="event.stopImmediatePropagation()"
-           class="bg-zinc-900 rounded-3xl p-6 w-full max-w-md mx-4 flex flex-col" style="max-height:85vh">
-        <h3 class="text-2xl font-semibold mb-4">🖨️ Bulk Print Labels</h3>
-
-        <div class="flex gap-2 mb-3">
-          <button onclick="document.querySelectorAll('.bulk-print-cb').forEach(c=>c.checked=true); updateBulkPrintCounter();"
-                  class="flex-1 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-2xl text-sm">Select All</button>
-          <button onclick="document.querySelectorAll('.bulk-print-cb').forEach(c=>c.checked=false); updateBulkPrintCounter();"
-                  class="flex-1 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-2xl text-sm">Select None</button>
+/* ---------- Loose items ---------- */
+function showNewItemModal() {
+  const boxOpts = state.boxes.slice().sort((a,b) => (a.name||'').localeCompare(b.name||''))
+    .map(b => `<option value="${b.id}">${escapeHtml(b.id)} — ${escapeHtml(b.name || 'Untitled')} (${escapeHtml(locLabel(b.area,b.cabinet))})</option>`).join('');
+  const areaNames = Object.keys(state.areas).sort(natSort);
+  const html = `
+    <div id="new-item-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-[200]"
+         onclick="if(event.target.id==='new-item-modal') this.remove()">
+      <div onclick="event.stopImmediatePropagation()" class="modal-panel bg-cream rounded-3xl p-6 w-full max-w-md mx-4">
+        <h3 class="text-2xl font-semibold mb-5">New item</h3>
+        <label class="block text-sm text-muted mb-1">Item name</label>
+        <input id="new-item-name" class="w-full bg-white border border-tan-dark rounded-2xl px-4 py-3 mb-4" placeholder="Skil saw">
+        <label class="block text-sm text-muted mb-1">Where is it?</label>
+        <select id="new-item-where" class="w-full bg-white border border-tan-dark rounded-2xl px-4 py-3 mb-3">
+          <option value="box">Inside a box</option>
+          <option value="loc">On a location (no box)</option>
+        </select>
+        <div id="new-item-box-wrap">
+          <select id="new-item-box" class="w-full bg-white border border-tan-dark rounded-2xl px-4 py-3 mb-4">
+            ${boxOpts || '<option value="">No boxes yet</option>'}
+          </select>
         </div>
-
-        <div class="overflow-y-auto flex-1 space-y-2 mb-4 pr-1">
-          ${listHTML}
+        <div id="new-item-loc-wrap" class="hidden grid grid-cols-2 gap-2 mb-4">
+          <select id="new-item-area" class="bg-white border border-tan-dark rounded-2xl px-3 py-3">
+            ${areaNames.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}
+            <option value="__custom__">+ New area…</option>
+          </select>
+          <select id="new-item-cabinet" class="bg-white border border-tan-dark rounded-2xl px-3 py-3"></select>
         </div>
-
-        <div id="bulk-print-counter" class="text-sm text-zinc-400 text-center mb-4">0 boxes selected = 0 page(s)</div>
-
+        <label class="flex items-center gap-2 text-sm mb-5">
+          <input id="new-item-out" type="checkbox" class="accent-moss"> Checked out (pulled from storage)
+        </label>
         <div class="flex gap-3">
-          <button onclick="document.getElementById('bulk-print-modal').remove()"
-                  class="flex-1 py-3 bg-zinc-800 rounded-2xl">Cancel</button>
-          <button id="bulk-print-go" onclick="runBulkPrint()" disabled
-                  class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-2xl font-semibold">
-            Print Selected
-          </button>
+          <button onclick="document.getElementById('new-item-modal').remove()" class="flex-1 py-3 bg-tan rounded-2xl">Cancel</button>
+          <button onclick="createNewItem()" class="flex-1 py-3 bg-acorn text-cream rounded-2xl font-semibold">Add item</button>
         </div>
       </div>
-    </div>
-  `;
-
-  document.body.insertAdjacentHTML('beforeend', modalHTML);
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+  const where = document.getElementById('new-item-where');
+  const areaSel = document.getElementById('new-item-area');
+  const cabSel = document.getElementById('new-item-cabinet');
+  fillCabinetSelect(cabSel, areaSel.value, '');
+  where.onchange = () => {
+    document.getElementById('new-item-box-wrap').classList.toggle('hidden', where.value !== 'box');
+    document.getElementById('new-item-loc-wrap').classList.toggle('hidden', where.value !== 'loc');
+  };
+  areaSel.onchange = () => {
+    if (areaSel.value === '__custom__') {
+      const area = promptCustomArea(areaSel);
+      if (area) { fillAreaSelect(areaSel, area); fillCabinetSelect(cabSel, area, ''); }
+    } else fillCabinetSelect(cabSel, areaSel.value, '');
+  };
+  cabSel.onchange = () => {
+    if (cabSel.value === '__custom__') {
+      const cab = promptCustomCabinet(areaSel.value);
+      fillCabinetSelect(cabSel, areaSel.value, cab || '');
+    }
+  };
+  setTimeout(() => document.getElementById('new-item-name').focus(), 50);
 }
 
+function createNewItem() {
+  const name = document.getElementById('new-item-name').value.trim();
+  if (!name) { alert('Please enter an item name.'); return; }
+  const where = document.getElementById('new-item-where').value;
+  const checkedOut = document.getElementById('new-item-out').checked;
+  let boxId = null, area = '', cabinet = '';
+  if (where === 'box') {
+    boxId = document.getElementById('new-item-box').value;
+    if (!boxId) { alert('Create a box first, or put this item on a location.'); return; }
+    const box = boxById(boxId);
+    area = box?.area || '';
+    cabinet = box?.cabinet || '';
+  } else {
+    area = document.getElementById('new-item-area').value;
+    cabinet = document.getElementById('new-item-cabinet').value;
+    if (area === '__custom__' || cabinet === '__custom__') { alert('Pick a location.'); return; }
+    rememberLocation(area, cabinet);
+  }
+  state.items.push({ id: uid('ITM'), name, boxId, area, cabinet, checkedOut, created: nowIso() });
+  saveState();
+  document.getElementById('new-item-modal').remove();
+  if (boxId) showBoxDetail(boxId);
+  else { switchTab(2); document.getElementById('find-input').value = name; runFind(); }
+}
+
+function openItem(itemId) {
+  const item = state.items.find(i => i.id === itemId);
+  if (!item) return;
+  if (item.boxId) showBoxDetail(item.boxId);
+  else {
+    switchTab(2);
+    document.getElementById('find-input').value = item.name;
+    runFind();
+  }
+}
+
+/* ---------- Find + voice search ---------- */
+function normalize(s) {
+  return String(s || '').toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function extractQuery(transcript) {
+  let q = normalize(transcript);
+  q = q.replace(/^(hey stashr|ok stashr|okay stashr)\s+/, '');
+  q = q.replace(/^(where s|wheres|where is|where are|find|locate|look for|search for|what box (is|has)|do we have)\s+/, '');
+  q = q.replace(/^(my|the|our|a|an)\s+/, '');
+  return q.replace(/\?+$/, '').trim();
+}
+function scoreMatch(hay, query) {
+  const h = normalize(hay);
+  const q = normalize(query);
+  if (!q) return 0;
+  if (h === q) return 100;
+  if (h.includes(q)) return 80;
+  const words = q.split(' ').filter(Boolean);
+  if (words.every(w => h.includes(w))) return 60;
+  if (words.filter(w => w.length > 2 && h.includes(w)).length) return 30;
+  return 0;
+}
+
+function searchInventory(query) {
+  const q = extractQuery(query);
+  if (!q) return [];
+  const results = [];
+  state.items.forEach(item => {
+    const box = item.boxId ? boxById(item.boxId) : null;
+    const hay = `${item.name} ${box ? `${box.id} ${box.name} ${box.notes}` : ''} ${item.area} ${item.cabinet}`;
+    const score = scoreMatch(hay, q);
+    if (score) {
+      results.push({
+        type: 'item',
+        score,
+        id: item.id,
+        name: item.name,
+        checkedOut: !!item.checkedOut,
+        boxId: item.boxId,
+        place: itemPlace(item),
+        location: box ? locLabel(box.area, box.cabinet) : locLabel(item.area, item.cabinet)
+      });
+    }
+  });
+  state.boxes.forEach(box => {
+    const hay = `${box.id} ${box.name} ${box.notes} ${box.area} ${box.cabinet}`;
+    const score = scoreMatch(hay, q);
+    if (score) {
+      results.push({
+        type: 'box',
+        score,
+        id: box.id,
+        name: box.name || box.id,
+        checkedOut: false,
+        boxId: box.id,
+        place: `${box.id}, ${box.name || 'Untitled box'}, ${locLabel(box.area, box.cabinet)}`,
+        location: locLabel(box.area, box.cabinet)
+      });
+    }
+  });
+  results.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+  const seen = new Set();
+  return results.filter(r => {
+    const key = r.type + r.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function runFind(speak) {
+  const raw = document.getElementById('find-input').value;
+  const outOnly = document.getElementById('find-out-only').checked;
+  const container = document.getElementById('find-results');
+  const spokenEl = document.getElementById('find-spoken');
+  if (!raw.trim() && !outOnly) {
+    const recent = state.items.slice(-8).reverse().map(asFindResult);
+    container.innerHTML = `
+      <p class="text-sm text-muted mb-2">${state.items.length} items in the household stash.</p>
+      ${recent.map(itemRow).join('') || '<div class="text-muted text-sm">Add items from a box or the menu.</div>'}`;
+    spokenEl.classList.add('hidden');
+    return;
+  }
+  let matches = raw.trim() ? searchInventory(raw) : state.items.map(asFindResult);
+  if (outOnly) matches = matches.filter(m => m.checkedOut);
+  if (speak) speakFindResult(extractQuery(raw) || raw, matches);
+  if (matches.length === 0) {
+    container.innerHTML = `<div class="text-center py-8 text-muted">No matches for “${escapeHtml(raw)}”.</div>`;
+    return;
+  }
+  container.innerHTML = matches.map(itemRow).join('');
+}
+
+function asFindResult(item) {
+  const box = item.boxId ? boxById(item.boxId) : null;
+  return {
+    type: 'item',
+    id: item.id,
+    name: item.name,
+    checkedOut: !!item.checkedOut,
+    boxId: item.boxId,
+    place: itemPlace(item),
+    location: box ? locLabel(box.area, box.cabinet) : locLabel(item.area, item.cabinet)
+  };
+}
+function itemRow(m) {
+  const canOpen = !!(m.type === 'box' || m.boxId);
+  const handler = canOpen ? `showBoxDetail(${JSON.stringify(m.boxId || m.id)})` : '';
+  return `
+    <button onclick='${handler}'
+            class="w-full text-left bg-cream border border-tan-dark rounded-2xl px-4 py-3 hover:bg-white">
+      <div class="flex justify-between gap-2">
+        <div class="font-semibold">${escapeHtml(m.name)}</div>
+        ${m.checkedOut ? '<span class="text-[10px] uppercase bg-bark/10 text-bark px-2 py-0.5 rounded-full">Checked out</span>' : ''}
+      </div>
+      <div class="text-sm text-muted mt-0.5">${escapeHtml(m.place || m.location || '')}</div>
+    </button>`;
+}
+
+function speakFindResult(query, matches) {
+  const spokenEl = document.getElementById('find-spoken');
+  let text;
+  if (!matches.length) text = `I couldn't find ${query || 'that'} in your stash.`;
+  else if (matches.length === 1) {
+    const m = matches[0];
+    text = m.checkedOut
+      ? `${m.name} is checked out. It belongs in ${m.place}.`
+      : `${m.name} is in ${m.place}.`;
+  } else {
+    const top = matches.slice(0, 3).map(m => `${m.name} in ${m.place}`).join('. ');
+    text = `I found ${matches.length} matches. ${top}.`;
+  }
+  spokenEl.textContent = text;
+  spokenEl.classList.remove('hidden');
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1;
+    u.lang = 'en-US';
+    window.speechSynthesis.speak(u);
+  }
+}
+
+function startVoiceSearch() {
+  const micBtn = document.getElementById('find-mic');
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) {
+    alert('Voice search is not supported in this browser. Type your search instead. Chrome on Android works well.');
+    document.getElementById('find-input').focus();
+    return;
+  }
+  if (recognition) {
+    recognition.stop();
+    recognition = null;
+    micBtn.classList.remove('listening');
+    return;
+  }
+  recognition = new SpeechRec();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.lang = 'en-US';
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript.trim();
+    document.getElementById('find-input').value = transcript;
+    runFind(true);
+    micBtn.classList.remove('listening');
+    recognition = null;
+  };
+  recognition.onerror = (event) => {
+    micBtn.classList.remove('listening');
+    recognition = null;
+    if (event.error === 'no-speech') alert("Didn't hear anything. Try again.");
+    else if (event.error !== 'aborted') alert('Voice search error. You can type instead — lookup is local and works offline.');
+  };
+  recognition.onend = () => { micBtn.classList.remove('listening'); recognition = null; };
+  try {
+    recognition.start();
+    micBtn.classList.add('listening');
+  } catch (e) {
+    alert('Could not start the microphone.');
+    micBtn.classList.remove('listening');
+    recognition = null;
+  }
+}
+
+function startVoiceInput() {
+  const micBtn = document.getElementById('mic-btn');
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) {
+    alert('Voice input is not supported on this browser. Try Chrome on Android.');
+    return;
+  }
+  if (recognition) {
+    recognition.stop();
+    recognition = null;
+    micBtn.classList.remove('listening');
+    return;
+  }
+  recognition = new SpeechRec();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.lang = 'en-US';
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript.trim();
+    if (transcript && currentBoxId) addItemToBox(currentBoxId, transcript);
+    micBtn.classList.remove('listening');
+    recognition = null;
+  };
+  recognition.onerror = () => { micBtn.classList.remove('listening'); recognition = null; };
+  recognition.onend = () => { micBtn.classList.remove('listening'); recognition = null; };
+  try { recognition.start(); micBtn.classList.add('listening'); }
+  catch (e) { micBtn.classList.remove('listening'); recognition = null; }
+}
+
+/* ---------- Print labels ---------- */
+function qrScriptSrc() {
+  return new URL('vendor/qrcode.min.js', window.location.href).href;
+}
+
+function printLabel() {
+  const box = boxById(currentBoxId);
+  if (!box) return;
+  printSelectedLabels([box.id], 1);
+}
+
+function showBulkPrintModal() {
+  const area = document.getElementById('area-filter').value;
+  const candidates = area ? state.boxes.filter(b => b.area === area) : state.boxes.slice();
+  if (candidates.length === 0) { alert('No boxes to print.'); return; }
+  const listHTML = candidates.map(box => `
+    <label class="flex items-center gap-3 bg-white hover:bg-tan rounded-2xl px-4 py-3 cursor-pointer border border-tan-dark">
+      <input type="checkbox" class="bulk-print-cb w-4 h-4 accent-moss" value="${box.id}" onchange="updateBulkPrintCounter()">
+      <span class="font-mono text-moss text-sm">${escapeHtml(box.id)}</span>
+      <span class="truncate">${escapeHtml(box.name || '')}</span>
+      <span class="text-xs text-muted ml-auto">${escapeHtml(locLabel(box.area, box.cabinet))}</span>
+    </label>`).join('');
+  const html = `
+    <div id="bulk-print-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-[200]"
+         onclick="if(event.target.id==='bulk-print-modal') this.remove()">
+      <div onclick="event.stopImmediatePropagation()" class="modal-panel bg-cream rounded-3xl p-6 w-full max-w-md mx-4 flex flex-col" style="max-height:85vh">
+        <h3 class="text-2xl font-semibold mb-4">Bulk print labels</h3>
+        <div class="flex gap-2 mb-3">
+          <button onclick="document.querySelectorAll('.bulk-print-cb').forEach(c=>c.checked=true); updateBulkPrintCounter();" class="flex-1 py-2 bg-tan rounded-2xl text-sm">Select all</button>
+          <button onclick="document.querySelectorAll('.bulk-print-cb').forEach(c=>c.checked=false); updateBulkPrintCounter();" class="flex-1 py-2 bg-tan rounded-2xl text-sm">Select none</button>
+        </div>
+        <div class="overflow-y-auto flex-1 space-y-2 mb-4 pr-1">${listHTML}</div>
+        <div id="bulk-print-counter" class="text-sm text-muted text-center mb-4">0 boxes selected</div>
+        <div class="flex gap-3">
+          <button onclick="document.getElementById('bulk-print-modal').remove()" class="flex-1 py-3 bg-tan rounded-2xl">Cancel</button>
+          <button id="bulk-print-go" onclick="runBulkPrint()" disabled
+                  class="flex-1 py-3 bg-acorn text-cream disabled:opacity-40 rounded-2xl font-semibold">Print selected</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
 function updateBulkPrintCounter() {
-  const checked = document.querySelectorAll('.bulk-print-cb:checked').length;
-  const pages = Math.ceil(checked / 4);
-  const counter = document.getElementById('bulk-print-counter');
+  const n = document.querySelectorAll('.bulk-print-cb:checked').length;
+  const el = document.getElementById('bulk-print-counter');
   const btn = document.getElementById('bulk-print-go');
-  if (counter) counter.textContent = `${checked} box${checked !== 1 ? 'es' : ''} selected = ${pages} page${pages !== 1 ? 's' : ''}`;
-  if (btn) btn.disabled = checked === 0;
+  if (el) el.textContent = `${n} box${n !== 1 ? 'es' : ''} selected`;
+  if (btn) btn.disabled = n === 0;
 }
-
 function runBulkPrint() {
   const ids = Array.from(document.querySelectorAll('.bulk-print-cb:checked')).map(cb => cb.value);
-  if (ids.length === 0) return;
-  document.getElementById('bulk-print-modal').remove();
-  printSelectedLabels(ids);
+  document.getElementById('bulk-print-modal')?.remove();
+  printSelectedLabels(ids, 2);
 }
 
-function printSelectedLabels(boxIds) {
-  const selectedBoxes = boxIds.map(id => boxes.find(b => b.id === id)).filter(Boolean);
-  if (selectedBoxes.length === 0) return;
-
+function printSelectedLabels(boxIds, perPage) {
+  const selected = boxIds.map(id => boxById(id)).filter(Boolean);
+  if (!selected.length) return;
+  perPage = perPage || 2;
   function labelHTML(box, idx) {
     return `
       <div class="label">
-        <div class="header">MOVE TO DEBBIE LANE</div>
-        <div class="room">${escapeHtml(box.room)}</div>
+        <div class="brand">STASHR</div>
+        <div class="name">${escapeHtml(box.name || 'Untitled box')}</div>
+        <div class="loc">${escapeHtml(locLabel(box.area, box.cabinet) || 'No location')}</div>
         <div class="qr" id="qr-${idx}"></div>
-        <div class="id">${box.id}</div>
-        ${box.notes ? `<div class="notes">${escapeHtml(box.notes)}</div>` : ''}
+        <div class="id">${escapeHtml(box.id)}</div>
       </div>`;
   }
-
-  const pagesHTML = [];
-  for (let i = 0; i < selectedBoxes.length; i += 4) {
-    const group = selectedBoxes.slice(i, i + 4);
-    pagesHTML.push(`<div class="page">${group.map((box, j) => labelHTML(box, i + j)).join('')}</div>`);
+  const pages = [];
+  for (let i = 0; i < selected.length; i += perPage) {
+    const group = selected.slice(i, i + perPage);
+    pages.push(`<div class="page page-${perPage}">${group.map((b, j) => labelHTML(b, i + j)).join('')}</div>`);
   }
-
-  const qrScript = selectedBoxes.map((box, idx) => `
+  const qrJs = selected.map((box, idx) => `
     new QRCode(document.getElementById('qr-${idx}'), {
       text: ${JSON.stringify(box.id)},
-      width: 160,
-      height: 160,
+      width: ${perPage === 1 ? 280 : 200},
+      height: ${perPage === 1 ? 280 : 200},
       colorDark: "#000000",
       colorLight: "#ffffff",
       correctLevel: QRCode.CorrectLevel.H
     });`).join('\n');
-
   const printWindow = window.open('', '_blank');
+  if (!printWindow) { alert('Allow pop-ups to print labels.'); return; }
+  const qrSize = perPage === 1 ? '280px' : '200px';
   printWindow.document.write(`<!DOCTYPE html>
 <html>
 <head>
-  <title>Box Labels</title>
+  <title>Stashr Labels</title>
   <style>
     @page { size: letter; margin: 0.4in; }
-    body { font-family: system-ui; margin: 0; padding: 0; }
-    .page {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: 1fr 1fr;
-      gap: 0.15in;
-      width: 7.7in;
-      height: 10.2in;
-      page-break-after: always;
-    }
-    .page:last-child { page-break-after: auto; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #fff; color: #000; }
+    .page { page-break-after: always; }
+    .page-1 .label { width: 7.7in; min-height: 9.8in; }
+    .page-2 { display: flex; flex-direction: column; gap: 0.25in; }
+    .page-2 .label { width: 7.7in; min-height: 4.8in; }
     .label {
-      border: 2px solid black;
-      padding: 0.15in;
+      border: 8px solid #000;
+      padding: 24px 20px;
+      text-align: center;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      text-align: center;
-      page-break-inside: avoid;
     }
-    .label .header { font-size: 11px; color: #666; letter-spacing: 1px; }
-    .label .room { font-size: 28px; font-weight: bold; margin: 6px 0; }
-    .label .id { font-size: 16px; font-family: monospace; margin-top: 6px; }
-    .label .notes { font-size: 11px; color: #444; margin-top: 5px; max-width: 3in; }
-    .label .qr { margin: 6px 0; }
+    .brand { font-size: 14px; letter-spacing: 0.35em; font-weight: 800; }
+    .name { font-size: ${perPage === 1 ? '42px' : '32px'}; font-weight: 800; margin: 10px 0 6px; line-height: 1.1; }
+    .loc { font-size: ${perPage === 1 ? '28px' : '22px'}; font-weight: 700; margin-bottom: 12px; }
+    .qr { width: ${qrSize}; height: ${qrSize}; margin: 8px auto; }
+    .qr img, .qr canvas { width: ${qrSize} !important; height: ${qrSize} !important; }
+    .id { font-size: ${perPage === 1 ? '32px' : '24px'}; font-family: ui-monospace, monospace; font-weight: 800; margin-top: 10px; letter-spacing: 0.04em; }
   </style>
 </head>
 <body>
-${pagesHTML.join('\n')}
-<script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"><\/script>
+${pages.join('')}
+<script src="${qrScriptSrc()}"><\/script>
 <script>
 setTimeout(function() {
-${qrScript}
+${qrJs}
   window.print();
-}, 600);
+}, 500);
 <\/script>
 </body>
 </html>`);
   printWindow.document.close();
 }
 
-// ==================== PRINT LABEL ====================
-function printLabel() {
-  const box = boxes.find(b => b.id === currentBoxId);
-  if (!box) return;
-
-  const printWindow = window.open('', '_blank');
-  printWindow.document.write(`
-    <html>
-      <head>
-        <title>Box Label - ${box.id}</title>
-        <style>
-          body { font-family: system-ui; margin: 40px; text-align: center; }
-          .label { border: 3px solid black; padding: 30px; max-width: 500px; margin: 0 auto; }
-          .room { font-size: 42px; font-weight: bold; margin: 20px 0; }
-          .id { font-size: 28px; font-family: monospace; }
-        </style>
-      </head>
-      <body>
-        <div class="label">
-          <div style="font-size: 18px; color: #666;">MOVE TO DEBBIE LANE</div>
-          <div class="room">${box.room}</div>
-          <div id="print-qr"></div>
-          <div class="id">${box.id}</div>
-          <div style="margin-top: 20px; font-size: 14px; color: #444;">${escapeHtml(box.notes || '')}</div>
-        </div>
-        <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"><\/script>
-        <script>
-          setTimeout(() => {
-            new QRCode(document.getElementById('print-qr'), {
-              text: "${box.id}",
-              width: 220,
-              height: 220
-            });
-            window.print();
-          }, 300);
-        <\/script>
-      </body>
-    </html>
-  `);
-  printWindow.document.close();
+/* ---------- Scanner ---------- */
+function parseScan(text) {
+  const t = String(text || '').trim();
+  const m = t.match(/STASH-\d+/i);
+  return m ? m[0].toUpperCase() : t;
 }
-
-// ==================== QR SCANNER ====================
 function startScanner() {
   const qrReader = document.getElementById('qr-reader');
   qrReader.innerHTML = '';
   document.getElementById('scan-result').innerHTML = '';
-
-  html5QrCode = new Html5Qrcode("qr-reader");
-
+  if (!window.Html5Qrcode) {
+    document.getElementById('scan-result').innerHTML = '<span class="text-red-800">Scanner library did not load. Try refreshing once while online.</span>';
+    return;
+  }
+  html5QrCode = new Html5Qrcode('qr-reader');
   html5QrCode.start(
-    { facingMode: "environment" },
+    { facingMode: 'environment' },
     { fps: 10, qrbox: { width: 280, height: 280 } },
     (decodedText) => {
       stopScanner();
+      const code = parseScan(decodedText);
+      const found = boxById(code);
       const resultEl = document.getElementById('scan-result');
-      resultEl.innerHTML = `<span class="text-zinc-400">Fetching latest data...</span>`;
-
-      const showResult = () => {
-        const foundBox = boxes.find(b => b.id === decodedText);
-        if (foundBox) {
-          const items = foundBox.items || [];
-          const preview = items.length > 0
-            ? items.slice(0, 6).map(i => `<div class="text-sm text-zinc-200">• ${escapeHtml(i)}</div>`).join('')
-              + (items.length > 6 ? `<div class="text-xs text-zinc-500 mt-1">+${items.length - 6} more items</div>` : '')
-            : `<div class="text-sm text-zinc-500 italic">No items listed yet</div>`;
-          resultEl.innerHTML = `
-            <div class="text-left mt-3 bg-zinc-800 border border-zinc-600 rounded-2xl p-4">
-              <div class="font-mono text-emerald-400 text-sm font-bold mb-1">✓ ${escapeHtml(decodedText)}</div>
-              <div class="text-2xl font-semibold mb-3">${escapeHtml(foundBox.room)}</div>
-              ${preview}
-              <div class="text-xs text-zinc-500 mt-3">Opening box details...</div>
-            </div>`;
-          setTimeout(() => { showBoxDetail(decodedText); switchTab(1); }, 2000);
-        } else {
-          resultEl.innerHTML = `<span class="text-red-400">Box ${escapeHtml(decodedText)} not found — make sure you're signed into sync and try scanning again.</span>`;
-        }
-      };
-
-      if (window.MBSync && window.MBSync.isSignedIn()) {
-        window.MBSync.pull().then(showResult).catch(showResult);
+      if (found) {
+        const items = itemsInBox(found.id);
+        const preview = items.length
+          ? items.slice(0, 6).map(i => `<div class="text-sm">• ${escapeHtml(i.name)}${i.checkedOut ? ' <em>(out)</em>' : ''}</div>`).join('')
+          : '<div class="text-sm text-muted italic">No items listed yet</div>';
+        resultEl.innerHTML = `
+          <div class="text-left mt-3 bg-cream border border-tan-dark rounded-2xl p-4">
+            <div class="font-mono text-moss text-sm font-bold mb-1">✓ ${escapeHtml(found.id)}</div>
+            <div class="text-2xl font-semibold">${escapeHtml(found.name || '')}</div>
+            <div class="text-sm text-muted mb-3">${escapeHtml(locLabel(found.area, found.cabinet))}</div>
+            ${preview}
+          </div>`;
+        setTimeout(() => showBoxDetail(found.id), 600);
       } else {
-        showResult();
+        resultEl.innerHTML = `<div class="text-red-900">No box for <strong>${escapeHtml(code)}</strong>.</div>
+          <button onclick="adoptScannedCode(${JSON.stringify(code)})" class="mt-3 px-4 py-2 bg-acorn text-cream rounded-2xl">Create this box</button>`;
       }
     },
-    (errorMessage) => {}
+    () => {}
   ).catch(err => {
-    document.getElementById('scan-result').innerHTML = 
-      `<span class="text-red-400">Camera error: ${err}</span>`;
+    document.getElementById('scan-result').innerHTML = `<span class="text-red-800">Camera error: ${escapeHtml(err)}</span>`;
   });
 }
-
+function adoptScannedCode(code) {
+  if (boxById(code)) { showBoxDetail(code); return; }
+  const name = prompt('Name for this box?', code);
+  if (!name) return;
+  const areaNames = Object.keys(state.areas);
+  const box = { id: code, name: name.trim(), area: areaNames[0] || '', cabinet: '', notes: '', created: nowIso(), updated: nowIso() };
+  state.boxes.unshift(box);
+  saveState();
+  showBoxDetail(box.id);
+}
 function stopScanner() {
   if (html5QrCode) {
     html5QrCode.stop().then(() => {
       html5QrCode = null;
       document.getElementById('qr-reader').innerHTML = '';
-    }).catch(() => {});
+    }).catch(() => { html5QrCode = null; });
   }
 }
 
-// ==================== EXPORT ====================
-function exportData() {
-  const dataStr = JSON.stringify(boxes, null, 2);
-  const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-  
-  const exportFileDefaultName = `moving-boxes-${new Date().toISOString().slice(0,10)}.json`;
-  
-  const linkElement = document.createElement('a');
-  linkElement.setAttribute('href', dataUri);
-  linkElement.setAttribute('download', exportFileDefaultName);
-  linkElement.click();
+/* ---------- Manage locations ---------- */
+function showLocationsModal() {
+  const html = `
+    <div id="locs-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-[200]"
+         onclick="if(event.target.id==='locs-modal') this.remove()">
+      <div onclick="event.stopImmediatePropagation()" class="modal-panel bg-cream rounded-3xl p-6 w-full max-w-lg mx-4 flex flex-col" style="max-height:88vh">
+        <h3 class="text-2xl font-semibold mb-1">Locations</h3>
+        <p class="text-sm text-muted mb-4">Areas and cabinet codes. New values typed on a box are saved here too.</p>
+        <div class="flex gap-2 mb-3">
+          <input id="new-area-input" class="flex-1 bg-white border border-tan-dark rounded-2xl px-3 py-2 text-sm" placeholder="New area name">
+          <button onclick="addAreaFromModal()" class="px-4 py-2 bg-acorn text-cream rounded-2xl text-sm">Add area</button>
+        </div>
+        <div id="locs-list" class="overflow-y-auto flex-1 space-y-3 pr-1"></div>
+        <button onclick="document.getElementById('locs-modal').remove()" class="mt-4 py-3 bg-tan rounded-2xl">Done</button>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+  renderLocationsModal();
+}
+function renderLocationsModal() {
+  const list = document.getElementById('locs-list');
+  if (!list) return;
+  const names = Object.keys(state.areas).sort(natSort);
+  list.innerHTML = names.map(area => {
+    const cabs = (state.areas[area] || []).slice().sort(natSort);
+    return `
+      <div class="bg-white border border-tan-dark rounded-2xl p-3">
+        <div class="flex justify-between items-center mb-2">
+          <div class="font-semibold">${escapeHtml(area)}</div>
+          <button onclick="deleteArea(${JSON.stringify(area)})" class="text-xs text-red-800">Remove area</button>
+        </div>
+        <div class="flex flex-wrap gap-1 mb-2">
+          ${cabs.map(c => `<span class="text-xs bg-tan px-2 py-1 rounded-full">${escapeHtml(c)}
+            <button onclick="deleteCabinet(${JSON.stringify(area)}, ${JSON.stringify(c)})" class="ml-1 opacity-60">×</button></span>`).join('') || '<span class="text-xs text-muted">No cabinet codes yet</span>'}
+        </div>
+        <div class="flex gap-2">
+          <input data-area="${escapeHtml(area)}" class="flex-1 bg-cream border border-tan-dark rounded-xl px-2 py-1 text-sm loc-cab-input" placeholder="Add code (A4)">
+          <button onclick="addCabinetFromModal(this)" data-area="${escapeHtml(area)}" class="text-sm px-3 bg-moss text-white rounded-xl">Add</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+function addAreaFromModal() {
+  const input = document.getElementById('new-area-input');
+  const name = input.value.trim();
+  if (!name) return;
+  rememberLocation(name, null);
+  saveState();
+  input.value = '';
+  populateAreaFilter();
+  renderLocationsModal();
+}
+function addCabinetFromModal(btn) {
+  const area = btn.dataset.area;
+  const input = btn.parentElement.querySelector('.loc-cab-input');
+  const cab = input.value.trim();
+  if (!cab) return;
+  rememberLocation(area, cab);
+  saveState();
+  populateAreaFilter();
+  renderLocationsModal();
+}
+function deleteCabinet(area, cab) {
+  if (!state.areas[area]) return;
+  state.areas[area] = state.areas[area].filter(c => c !== cab);
+  saveState();
+  populateAreaFilter();
+  renderLocationsModal();
+}
+function deleteArea(area) {
+  if (!confirm(`Remove area “${area}”? Boxes keep their saved location text until you edit them.`)) return;
+  delete state.areas[area];
+  saveState();
+  populateAreaFilter();
+  renderLocationsModal();
 }
 
-// ==================== INITIAL SETUP ====================
-function populateRoomFilter(){
-  const filter = document.getElementById('room-filter');
-  const currentVal = filter.value;
-  const allRooms = Array.from(new Set([...defaultRooms, ...boxes.map(b => b.room)])).sort();
-  filter.innerHTML = '<option value="">All Rooms</option>' +
-    allRooms.map(r => `<option value="${r.replace(/"/g, '&quot;')}">${r}</option>`).join('');
-  filter.value = currentVal;
+/* ---------- Export / import ---------- */
+function blobToDataUrl(blob) {
+  return new Promise((resolve) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.readAsDataURL(blob);
+  });
+}
+function dataUrlToBlob(dataUrl) {
+  const [meta, b64] = dataUrl.split(',');
+  const mime = (meta.match(/data:(.*);base64/) || [])[1] || 'image/jpeg';
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
 }
 
-function init() {
-  populateRoomFilter();
+async function exportData() {
+  const photos = {};
+  try {
+    const keys = await Photos.keys();
+    for (const key of keys) {
+      const blob = await Photos.get(key);
+      if (blob) photos[key] = await blobToDataUrl(blob);
+    }
+  } catch (e) { console.warn(e); }
+  const payload = {
+    app: 'stashr',
+    version: 1,
+    exported: nowIso(),
+    boxes: state.boxes,
+    items: state.items,
+    areas: state.areas,
+    photos
+  };
+  const dataStr = JSON.stringify(payload, null, 2);
+  const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+  const link = document.createElement('a');
+  link.href = dataUri;
+  link.download = `stashr-${new Date().toISOString().slice(0, 10)}.json`;
+  link.click();
+}
 
+async function importData(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  let data;
+  try { data = JSON.parse(await file.text()); }
+  catch (e) { alert('That file is not valid JSON.'); return; }
+  if (!data || (data.app && data.app !== 'stashr' && !data.boxes)) {
+    alert('This does not look like a Stashr export.');
+    return;
+  }
+  const boxes = data.boxes || (Array.isArray(data) ? data : []);
+  const items = data.items || [];
+  const areas = data.areas || {};
+  const photos = data.photos || {};
+  const mode = confirm('OK = replace all Stashr data with this file.\nCancel = merge (keep existing, add/update from file).');
+  if (mode) {
+    state.boxes = boxes;
+    state.items = items;
+    state.areas = mergeSeed(areas);
+  } else {
+    const boxMap = new Map(state.boxes.map(b => [b.id, b]));
+    boxes.forEach(b => boxMap.set(b.id, b));
+    state.boxes = [...boxMap.values()];
+    const itemMap = new Map(state.items.map(i => [i.id, i]));
+    items.forEach(i => itemMap.set(i.id, i));
+    state.items = [...itemMap.values()];
+    state.areas = mergeSeed({ ...state.areas, ...areas });
+    for (const [area, cabs] of Object.entries(areas)) {
+      (cabs || []).forEach(c => rememberLocation(area, c));
+    }
+  }
+  saveState();
+  for (const [id, dataUrl] of Object.entries(photos)) {
+    try { await Photos.put(id, dataUrlToBlob(dataUrl)); } catch (e) {}
+  }
+  populateAreaFilter();
   renderDashboard();
   renderBoxesList();
+  alert('Import complete.');
+}
 
-  document.getElementById('search-input').addEventListener('keypress', function(e) {
-    if (e.key === "Enter") renderBoxesList();
-  });
+/* ---------- Hash deep link ---------- */
+function openFromHash() {
+  const hash = decodeURIComponent((location.hash || '').replace(/^#/, ''));
+  const code = parseScan(hash);
+  if (code && boxById(code)) showBoxDetail(code);
+}
 
-  if (boxes.length === 0) {
-    setTimeout(() => {
-      if (confirm("Welcome! Would you like to create your first moving box now?")) {
-        showNewBoxModal();
-      }
-    }, 1200);
+/* ---------- Init ---------- */
+function init() {
+  loadState();
+  populateAreaFilter();
+  renderDashboard();
+  renderBoxesList();
+  openFromHash();
+  window.addEventListener('hashchange', openFromHash);
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(err => console.warn('[Stashr] SW', err));
   }
-
-  console.log('%c[MoveBox QR] App ready with voice input.', 'color:#666');
 }
 
 init();
-
-// ==================== HAMBURGER MENU ====================
-function toggleHamburgerMenu(event) {
-  event.stopPropagation();
-  document.getElementById('hamburger-menu').classList.toggle('hidden');
-}
-
-function closeHamburgerMenu() {
-  const menu = document.getElementById('hamburger-menu');
-  if (menu) menu.classList.add('hidden');
-}
-
-document.addEventListener('click', closeHamburgerMenu);
-</script>
-<!-- ============================================================
-     MoveBox QR — Google Drive Auto Sync
-     Adapted from your Nickey Dispatch sync system
-     - Auto pull on load + tab focus
-     - Auto push on data change (30s debounce)
-     - One sign-in works across phone + Windows
-     ============================================================ -->
-<script>
-(function(){
-  'use strict';
-
-  // ================== CONFIG ==================
-  const CLIENT_ID = '1067375485374-cn97feb2m9bj4fr067uab62d0p1j4qkk.apps.googleusercontent.com';
-  const SCOPES = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email';
-  const FOLDER_NAME = 'MoveBox QR Data';
-  const DATA_FILE = 'movebox-shared-data.json';
-  const PUSH_DEBOUNCE = 5000; // 5 seconds
-  const TOKEN_BUFFER = 600000; // refresh 10 min early
-
-  // Only sync the main boxes data for now
-  const SYNC_KEYS = ['movingBoxes'];
-  const SYNC_KEY_SET = new Set(SYNC_KEYS);
-
-  // ================== STATE ==================
-  let tokenClient = null;
-  let accessToken = null;
-  let tokenExpiry = 0;
-  let userEmail = null;
-  let isSignedIn = false;
-  let folderId = null;
-  let driveFileId = null;
-  let initialPullDone = false;
-  let pushTimer = null;
-  let lastError = null;
-  let isSyncing = false;
-  let silentRefreshPending = false;
-
-  const _persisted = {
-    token: localStorage.getItem('mbsync_accessToken'),
-    expiry: parseInt(localStorage.getItem('mbsync_tokenExpiry') || '0', 10),
-    email: localStorage.getItem('mbsync_userEmail'),
-    folderId: localStorage.getItem('mbsync_folderId'),
-    fileId: localStorage.getItem('mbsync_fileId')
-  };
-
-  // ================== HELPERS ==================
-  function log(msg, data){ console.log('[MoveBoxSync]', msg, data !== undefined ? data : ''); }
-  function logError(msg, err){
-    const detail = err ? (err.message || JSON.stringify(err)) : '';
-    lastError = detail ? msg + ': ' + detail : msg;
-    console.error('[MoveBoxSync ERROR]', lastError);
-  }
-
-  const _rawSet = localStorage.setItem.bind(localStorage);
-  localStorage.setItem = function(key, value){
-    _rawSet(key, value);
-    if (SYNC_KEY_SET.has(key)){
-      _rawSet('mbsync_ts_' + key, new Date().toISOString());
-      log('Local change detected for ' + key + ' — push scheduled');
-      if (isSignedIn && initialPullDone) {
-        debouncedPush();
-      } else {
-        log('Push skipped — not signed in or initial pull not done', { isSignedIn, initialPullDone });
-      }
-    }
-  };
-
-  function saveToken(token, expiresInSec, email){
-    accessToken = token;
-    tokenExpiry = Date.now() + expiresInSec * 1000;
-    userEmail = email || userEmail;
-    isSignedIn = true;
-    _rawSet('mbsync_accessToken', token);
-    _rawSet('mbsync_tokenExpiry', String(tokenExpiry));
-    if (userEmail) _rawSet('mbsync_userEmail', userEmail);
-  }
-
-  function clearToken(){
-    accessToken = null; tokenExpiry = 0; userEmail = null;
-    isSignedIn = false; folderId = null; driveFileId = null;
-    initialPullDone = false;
-    ['mbsync_accessToken','mbsync_tokenExpiry','mbsync_userEmail',
-     'mbsync_folderId','mbsync_fileId'].forEach(k => localStorage.removeItem(k));
-    _persisted.token = null; _persisted.expiry = 0; _persisted.email = null; _persisted.folderId = null; _persisted.fileId = null;
-  }
-
-  function tokenValid(){
-    return !!(accessToken && Date.now() < tokenExpiry - TOKEN_BUFFER);
-  }
-
-  function scheduleRefresh(){
-    const delay = tokenExpiry - Date.now() - TOKEN_BUFFER;
-    if (delay > 0) setTimeout(silentRefresh, delay);
-  }
-
-  function silentRefresh(){
-    if (!tokenClient || silentRefreshPending) return;
-    silentRefreshPending = true;
-    const hint = userEmail || _persisted.email || localStorage.getItem('mbsync_loginHint') || '';
-    tokenClient.requestAccessToken({ prompt: '', ...(hint ? { login_hint: hint } : {}) });
-  }
-
-  // ================== UI ==================
-  function injectStyles(){
-    if (document.getElementById('mbsync-styles')) return;
-    const s = document.createElement('style');
-    s.id = 'mbsync-styles';
-    s.textContent = `
-      #mbsyncPill{position:fixed;bottom:14px;right:14px;z-index:9998;
-        background:rgba(0,0,0,0.92);border:1px solid #444;color:#aaa;
-        font-size:11px;padding:6px 12px;border-radius:14px;cursor:pointer;
-        display:flex;align-items:center;gap:6px;opacity:0;transition:opacity 0.3s;}
-      #mbsyncPill.show{opacity:1;}
-      #mbsyncPill.signed-in{border-color:#10b981;color:#6ee7b7;}
-      #mbsyncPill.syncing{border-color:#f59e0b;color:#fcd34d;}
-      #mbsyncPill.error{border-color:#ef4444;color:#fca5a5;}
-      #mbsyncPill.offline{border-color:#666;color:#888;}
-      .mbsync-dot{width:7px;height:7px;border-radius:50%;background:#555;flex-shrink:0;}
-      .mbsync-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:none;align-items:center;justify-content:center;padding:20px;}
-      .mbsync-modal-bg.show{display:flex;}
-      .mbsync-modal{background:#111;border:2px solid #10b981;border-radius:16px;padding:24px;max-width:360px;width:100%;text-align:center;font-family:system-ui;}
-      .mbsync-modal h3{color:#10b981;font-size:18px;margin-bottom:12px;}
-      .mbsync-info{background:#1f2937;border:1px solid #374151;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;color:#d1d5db;text-align:left;}
-      .mbsync-email{color:#10b981;font-weight:700;}
-      .mbsync-btn{padding:12px 16px;border-radius:10px;font-weight:700;cursor:pointer;border:none;font-size:14px;}
-      .mbsync-btn.primary{background:#10b981;color:#111;}
-      .mbsync-btn.danger{background:#7f1d1d;color:#fca5a5;border:1px solid #ef4444;}
-      .mbsync-btn.cancel{background:#374151;color:#d1d5db;border:1px solid #4b5563;}
-    `;
-    document.head.appendChild(s);
-  }
-
-  function injectPill(){
-    if (document.getElementById('mbsyncPill')) return;
-    const pill = document.createElement('div');
-    pill.id = 'mbsyncPill';
-    pill.innerHTML = '<span class="mbsync-dot"></span><span id="mbsyncPillText">Cloud Sync</span>';
-    pill.onclick = () => window.MBSync.openModal();
-    document.body.appendChild(pill);
-  }
-
-  function injectModal(){
-    if (document.getElementById('mbsyncModalBg')) return;
-    const bg = document.createElement('div');
-    bg.id = 'mbsyncModalBg';
-    bg.className = 'mbsync-modal-bg';
-    bg.innerHTML = `<div class="mbsync-modal"><h3>☁️ MoveBox Cloud Sync</h3><div id="mbsyncModalBody"></div></div>`;
-    bg.onclick = e => { if (e.target === bg) bg.classList.remove('show'); };
-    document.body.appendChild(bg);
-  }
-
-  function showPill(state, text, duration){
-    const pill = document.getElementById('mbsyncPill');
-    const txt = document.getElementById('mbsyncPillText');
-    if (!pill || !txt) return;
-    pill.className = 'show' + (state ? ' ' + state : '');
-    txt.textContent = text;
-    if (duration && state !== 'signed-in') setTimeout(() => pill.classList.remove('show'), duration);
-  }
-
-  function openModal(){
-    const bg = document.getElementById('mbsyncModalBg');
-    const body = document.getElementById('mbsyncModalBody');
-    if (!bg || !body) return;
-
-    const last = localStorage.getItem('mbsync_lastSync');
-    const lastStr = last ? new Date(last).toLocaleString() : 'Never';
-
-    if (isSignedIn){
-      body.innerHTML = `
-        <div class="mbsync-info">
-          <strong>✓ Signed in</strong><br>
-          <span class="mbsync-email">${userEmail || 'your account'}</span>
-        </div>
-        <div class="mbsync-info">Last sync: ${lastStr}${lastError ? '<br><span style="color:#f87171">⚠ ' + lastError + '</span>' : ''}</div>
-        <div class="mbsync-info" style="font-size:11px;line-height:1.4">
-          <strong>👨‍👩‍👧 Share with family:</strong><br>
-          Open Google Drive, find <strong>movebox-shared-data.json</strong>, right-click → Share → add their Gmail with Editor access. They'll see the same boxes when they sign in here.
-        </div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <button class="mbsync-btn primary" onclick="window.MBSync.syncNow()">⟳ Sync Now</button>
-          <button class="mbsync-btn danger" onclick="window.MBSync.signOut()">Sign Out</button>
-          <button class="mbsync-btn cancel" onclick="document.getElementById('mbsyncModalBg').classList.remove('show')">Close</button>
-        </div>`;
-    } else {
-      body.innerHTML = `
-        <p style="color:#d1d5db;margin-bottom:16px">Sign in with Google to automatically sync your boxes across phone, Windows, and family devices.</p>
-        <div class="mbsync-info"><strong>Your data stays private</strong><br>Saved only in your Google Drive.<br>Auto-syncs when you make changes.</div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <button class="mbsync-btn primary" onclick="window.MBSync.signIn()">🔐 Sign in with Google</button>
-          <button class="mbsync-btn cancel" onclick="document.getElementById('mbsyncModalBg').classList.remove('show')">Cancel</button>
-        </div>`;
-    }
-    bg.classList.add('show');
-  }
-
-  // ================== GOOGLE AUTH ==================
-  function loadGIS(){
-    return new Promise((resolve, reject) => {
-      if (window.google?.accounts) return resolve();
-      const s = document.createElement('script');
-      s.src = 'https://accounts.google.com/gsi/client';
-      s.onload = resolve;
-      s.onerror = () => reject(new Error('Failed to load Google Identity Services'));
-      document.head.appendChild(s);
-    });
-  }
-
-  function ensureTokenClient(){
-    if (tokenClient) return tokenClient;
-    if (!window.google?.accounts?.oauth2) return null;
-    tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: SCOPES,
-      callback: handleTokenResponse,
-      error_callback(err){
-        if (err.type === 'popup_closed') return;
-        logError('OAuth error', err);
-        showPill('error', 'Sign-in failed', 4000);
-      }
-    });
-    return tokenClient;
-  }
-
-  function handleTokenResponse(resp){
-    silentRefreshPending = false;
-    if (resp.error){
-      if (resp.error === 'interaction_required' || resp.error === 'access_denied'){
-        isSignedIn = false;
-        showPill(null, 'Sign in to sync', 6000);
-        return;
-      }
-      logError('Token error', resp);
-      showPill('error', 'Sign-in failed', 5000);
-      setTimeout(silentRefresh, 30000);
-      return;
-    }
-    const expiresIn = parseInt(resp.expires_in || '3600', 10);
-    const emailPromise = userEmail ? Promise.resolve() : fetchUserEmail(resp.access_token);
-    emailPromise.then(() => {
-      saveToken(resp.access_token, expiresIn, userEmail);
-      scheduleRefresh();
-      if (!initialPullDone){
-        showPill('syncing', 'Setting up sync...');
-        setupAndPull().then(() => pushToDrive());
-      } else {
-        pushToDrive();
-      }
-    }).catch(err => logError('Post-auth failed', err));
-  }
-
-  function fetchUserEmail(token){
-    return fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: 'Bearer ' + token }
-    }).then(r => r.json()).then(d => {
-      if (d.email){
-        userEmail = d.email;
-        _rawSet('mbsync_userEmail', userEmail);
-        _rawSet('mbsync_loginHint', userEmail);
-      }
-    }).catch(() => {});
-  }
-
-  // ================== DRIVE API ==================
-  function driveReq(method, url, body, contentType){
-    const headers = { Authorization: 'Bearer ' + accessToken };
-    if (contentType) headers['Content-Type'] = contentType;
-    return fetch(url, { method, headers, body }).then(r => {
-      if (r.status === 401){ silentRefresh(); throw new Error('Token expired'); }
-      if (r.status === 404){
-        driveFileId = null;
-        localStorage.removeItem('mbsync_fileId');
-        throw new Error('File not found — will recreate on next sync');
-      }
-      if (r.status === 204) return null;
-      return r.json().then(data => { if (!r.ok) throw new Error(data?.error?.message || 'HTTP ' + r.status); return data; });
-    });
-  }
-
-  function ensureFolder(){
-    if (folderId) return Promise.resolve(folderId);
-    if (_persisted.folderId){ folderId = _persisted.folderId; return Promise.resolve(folderId); }
-    const q = encodeURIComponent(`name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
-    return driveReq('GET', `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`)
-      .then(data => {
-        if (data.files?.length) folderId = data.files[0].id;
-        else return driveReq('POST', 'https://www.googleapis.com/drive/v3/files',
-          JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' }), 'application/json')
-          .then(f => { folderId = f.id; });
-      }).then(() => { _rawSet('mbsync_folderId', folderId); return folderId; });
-  }
-
-  function ensureDataFile(){
-    if (driveFileId) return Promise.resolve(driveFileId);
-    if (_persisted.fileId){ driveFileId = _persisted.fileId; return Promise.resolve(driveFileId); }
-
-    // Search for the data file across all accessible files (owned + shared with me)
-    const q = encodeURIComponent(`name='${DATA_FILE}' and trashed=false`);
-    const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,owners,shared)&includeItemsFromAllDrives=true&supportsAllDrives=true&corpora=allDrives`;
-
-    return driveReq('GET', searchUrl).then(data => {
-      if (data.files && data.files.length > 0){
-        // Found existing file (owned or shared) — use it
-        driveFileId = data.files[0].id;
-        _rawSet('mbsync_fileId', driveFileId);
-        log('Using existing shared/owned data file', driveFileId);
-        return driveFileId;
-      }
-      // No existing file anywhere — create a new one in this user's own folder
-      return ensureFolder().then(() => uploadFile(null, buildPayload())).then(f => {
-        driveFileId = f.id;
-        _rawSet('mbsync_fileId', driveFileId);
-        log('Created new data file (this user is owner)', driveFileId);
-        return driveFileId;
-      });
-    });
-  }
-
-  function showUpdateToast(){
-    const existing = document.getElementById('mbsync-update-toast');
-    if (existing) existing.remove();
-    const toast = document.createElement('div');
-    toast.id = 'mbsync-update-toast';
-    toast.style.cssText = 'position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:99999;background:#1f2937;border:2px solid #10b981;border-radius:14px;padding:12px 20px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,0.5);font-family:system-ui;max-width:90vw;';
-    toast.innerHTML = '<span style="color:#6ee7b7;font-size:15px;">📥 Boxes updated from another device</span><button onclick="this.parentElement.remove()" style="background:#10b981;color:#111;border:none;border-radius:8px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:13px;flex-shrink:0;">OK</button>';
-    document.body.appendChild(toast);
-  }
-
-  function buildPayload(){
-    const payload = { version: 1, device: /Mobile|Android/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop', syncedAt: new Date().toISOString(), keys: {} };
-    SYNC_KEYS.forEach(k => {
-      const val = localStorage.getItem(k);
-      if (val !== null) payload.keys[k] = { value: val, updatedAt: localStorage.getItem('mbsync_ts_' + k) || new Date(0).toISOString() };
-    });
-    return payload;
-  }
-
-  function applyPayload(payload){
-    if (!payload?.keys) return 0;
-    let changed = 0;
-    SYNC_KEYS.forEach(k => {
-      const remote = payload.keys[k];
-      if (!remote) return;
-      const localTs = localStorage.getItem('mbsync_ts_' + k) || new Date(0).toISOString();
-      if (remote.updatedAt > localTs){
-        _rawSet(k, remote.value);
-        _rawSet('mbsync_ts_' + k, remote.updatedAt);
-        changed++;
-      }
-    });
-    if (changed > 0 && typeof window.refreshMoveBoxUI === 'function') {
-      window.refreshMoveBoxUI();
-      if (initialPullDone) showUpdateToast();
-    }
-    return changed;
-  }
-
-  function uploadFile(fileId, data){
-    const json = JSON.stringify(data, null, 2);
-    const boundary = 'mbsync_' + Date.now();
-    const meta = JSON.stringify({ name: DATA_FILE, mimeType: 'application/json', ...(folderId && !fileId ? { parents: [folderId] } : {}) });
-    const body = [`--${boundary}`, 'Content-Type: application/json; charset=UTF-8', '', meta, `--${boundary}`, 'Content-Type: application/json', '', json, `--${boundary}--`].join('\r\n');
-    const url = fileId
-      ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&supportsAllDrives=true`
-      : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true';
-    return driveReq(fileId ? 'PATCH' : 'POST', url, body, `multipart/related; boundary="${boundary}"`);
-  }
-
-  function pullFromDrive(){
-    if (!tokenValid()) return Promise.resolve(0);
-    return ensureDataFile().then(fid => fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media&supportsAllDrives=true&t=${Date.now()}`, { headers: { Authorization: 'Bearer ' + accessToken } }))
-      .then(r => { if (!r.ok) throw new Error('Fetch failed'); return r.json(); })
-      .then(data => { const changed = applyPayload(data); _rawSet('mbsync_lastSync', new Date().toISOString()); return changed; });
-  }
-
-  function pushToDrive(){
-    if (!tokenValid() || !initialPullDone || isSyncing) return;
-    if (!navigator.onLine){ showPill('offline', 'Offline', 3000); return; }
-    isSyncing = true; showPill('syncing', 'Syncing...');
-    ensureDataFile().then(fid => uploadFile(fid, buildPayload()))
-      .then(() => { isSyncing = false; _rawSet('mbsync_lastSync', new Date().toISOString()); showPill('signed-in', '✓ Synced', 2500); })
-      .catch(err => { isSyncing = false; logError('Push failed', err); showPill('error', 'Sync failed — retrying', 5000); setTimeout(() => { if (isSignedIn) pushToDrive(); }, 60000); });
-  }
-
-  function debouncedPush(){
-    if (pushTimer) clearTimeout(pushTimer);
-    pushTimer = setTimeout(pushToDrive, PUSH_DEBOUNCE);
-  }
-
-  function setupAndPull(){
-    return ensureFolder().then(() => ensureDataFile()).then(() => pullFromDrive())
-      .then(changed => { initialPullDone = true; if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); if (changed > 0) showUpdateToast(); showPill('signed-in', '✓ Synced', 2500); })
-      .catch(err => {
-        logError('Initial pull failed', err);
-        // Set initialPullDone anyway so the 30s poll and pushes can still start
-        initialPullDone = true;
-        showPill('error', 'Sync error — will retry', 4000);
-        // Retry once after 15 seconds
-        setTimeout(() => {
-          if (isSignedIn) pullFromDrive()
-            .then(changed => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); if (changed > 0) showUpdateToast(); showPill('signed-in', '✓ Synced', 2500); })
-            .catch(e => logError('Retry pull failed', e));
-        }, 15000);
-      });
-  }
-
-  // ================== PUBLIC API ==================
-  window.MBSync = {
-    signIn(){
-      showPill('syncing', 'Loading...');
-      loadGIS().then(() => { const tc = ensureTokenClient(); if (tc) tc.requestAccessToken({ prompt: 'select_account' }); })
-        .catch(() => showPill('error', 'Sign-in unavailable', 4000));
-    },
-    signOut(){
-      if (accessToken && window.google?.accounts?.oauth2) try { window.google.accounts.oauth2.revoke(accessToken, () => {}); } catch(e){}
-      clearToken();
-      if (pushTimer){ clearTimeout(pushTimer); pushTimer = null; }
-      const pill = document.getElementById('mbsyncPill'); if (pill) pill.classList.remove('show');
-      const bg = document.getElementById('mbsyncModalBg'); if (bg) bg.classList.remove('show');
-    },
-    syncNow(){
-      if (!isSignedIn) return;
-      const bg = document.getElementById('mbsyncModalBg'); if (bg) bg.classList.remove('show');
-      showPill('syncing', 'Syncing...');
-      pullFromDrive().then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); }).finally(() => pushToDrive());
-    },
-    pull(){ return pullFromDrive().then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); }).catch(() => {}); },
-    openModal,
-    isSignedIn: () => isSignedIn,
-    getEmail: () => userEmail
-  };
-
-  // ================== INIT ==================
-  function initSync(){
-    injectStyles();
-    injectPill();
-    injectModal();
-
-    const stillGood = _persisted.token && _persisted.expiry > Date.now() + 60000;
-    if (stillGood){
-      accessToken = _persisted.token; tokenExpiry = _persisted.expiry; userEmail = _persisted.email;
-      folderId = _persisted.folderId || null; driveFileId = _persisted.fileId || null;
-      isSignedIn = true;
-      showPill('syncing', 'Reconnecting...');
-      loadGIS().then(() => { ensureTokenClient(); scheduleRefresh(); return setupAndPull(); })
-        .then(() => showPill('signed-in', '✓ Synced', 2500))
-        .catch(() => silentRefresh());
-    } else if (_persisted.email || localStorage.getItem('mbsync_loginHint')){
-      userEmail = _persisted.email || localStorage.getItem('mbsync_loginHint');
-      silentRefreshPending = true;
-      showPill('syncing', 'Reconnecting...');
-      loadGIS().then(() => { ensureTokenClient(); silentRefresh(); }).catch(() => showPill(null, 'Sign in to sync', 5000));
-    } else {
-      showPill(null, 'Cloud Sync', 3000);
-    }
-  }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initSync);
-  else setTimeout(initSync, 120);
-
-  // Expose a helper so applyPayload can refresh the UI
-  window.refreshMoveBoxUI = function(){
-    try {
-      if (window.__reloadBoxes) window.__reloadBoxes();
-      if (typeof renderDashboard === 'function') renderDashboard();
-      if (typeof renderBoxesList === 'function') renderBoxesList();
-      if (typeof populateRoomFilter === 'function') populateRoomFilter();
-      const modal = document.getElementById('box-modal');
-      if (modal && !modal.classList.contains('hidden') && currentBoxId && typeof showBoxDetail === 'function') {
-        showBoxDetail(currentBoxId);
-      }
-    } catch(e){ console.error('[refreshMoveBoxUI]', e); }
-  };
-
-  // Pull fresh data when user returns to the tab
-  window.addEventListener('focus', () => {
-    if (isSignedIn && initialPullDone) pullFromDrive()
-      .then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); })
-      .catch(err => logError('Focus pull failed', err));
-  });
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && isSignedIn && initialPullDone) {
-      pullFromDrive()
-        .then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); })
-        .catch(err => logError('Visibility pull failed', err));
-    }
-  });
-
-  // Periodic fallback poll every 30s — catches updates when both devices
-  // have the app open simultaneously (focus/visibilitychange never fire in that case)
-  setInterval(() => {
-    if (isSignedIn && initialPullDone) pullFromDrive()
-      .then(() => { if (typeof window.refreshMoveBoxUI === 'function') window.refreshMoveBoxUI(); })
-      .catch(err => logError('Periodic pull failed', err));
-  }, 30000);
-
-  window.addEventListener('beforeunload', () => {
-    if (isSignedIn && initialPullDone && pushTimer) {
-      clearTimeout(pushTimer);
-      try { pushToDrive(); } catch(e){}
-    }
-  });
-
-})();
 </script>
 </body>
 </html>
